@@ -13,14 +13,17 @@ import threading
 
 
 class Notifier:
-    def __init__(self, spawn=subprocess.Popen):
+    def __init__(self, spawn=subprocess.Popen, icon=None):
         self._spawn = spawn
+        self._icon = str(icon) if icon else None  # shown by the notification
         # Called when the user clicks the notification. May fire from a
         # thread — the glue wraps it with GLib.idle_add.
         self.on_activate = None
 
     def send(self, title: str, body: str) -> None:
         cmd = ["notify-send", "--app-name=Tomenotas"]
+        if self._icon:
+            cmd.append(f"--icon={self._icon}")
         if self.on_activate is not None:
             cmd.append("--action=default=Abrir")
         cmd += [title, body]

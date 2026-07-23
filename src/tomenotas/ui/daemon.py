@@ -32,6 +32,7 @@ from ..infra.notify import Notifier  # noqa: E402
 from ..infra.player import Player  # noqa: E402
 from ..infra.recorder import Recorder  # noqa: E402
 from ..infra.shortcuts import ShortcutManager  # noqa: E402
+from ..infra.shortcuts_portal import choose_backend  # noqa: E402
 from ..infra.sound import AlarmSound  # noqa: E402
 from ..infra.downloads import Downloader, ModelManager  # noqa: E402
 from ..infra.meeting_recorder import MeetingRecorder  # noqa: E402
@@ -72,7 +73,7 @@ class TrayDaemon:
                  store: SqliteNoteStore, player: Player, notifier: Notifier,
                  shortcuts: ShortcutManager, voices: VoiceManager,
                  models: ModelManager, alarm: CriticalAlarm,
-                 sound: AlarmSound):
+                 sound: AlarmSound, backend: str = "gsettings"):
         self._core = core
         self._config = config
         self._store = store
@@ -83,6 +84,7 @@ class TrayDaemon:
         self._models = models
         self._alarm = alarm
         self._sound = sound
+        self._backend = backend
         self._window = None  # created on demand at the first "Abrir"
         self._pulser = status.Pulser()
         self._pulsing = False
@@ -171,7 +173,7 @@ class TrayDaemon:
                                        self._notifier, self._shortcuts,
                                        self._voices, self._models,
                                        self._config, self._alarm,
-                                       self._sound)
+                                       self._sound, backend=self._backend)
         self._window.show_page(page)
 
     def on_settings(self, _item):
@@ -245,6 +247,26 @@ class TrayDaemon:
         elif method == "Ping":
             invocation.return_value(GLib.Variant("(s)", ("pong",)))
 
+    def dispatch_shortcut(self, action_id):
+        """Routes a shortcut id to the same handler the D-Bus methods use
+        — the target of the portal backend's Activated signal (KDE)."""
+        if action_id == "gravar":
+            self._handle_toggle()
+        elif action_id == "critica":
+            self._handle_toggle(critical=True)
+        elif action_id == "reuniao":
+            self._handle_toggle(meeting=True)
+        elif action_id == "listar":
+            self.show_window()
+        elif action_id == "ler":
+            threading.Thread(
+                target=self._core.read_current_note, daemon=True
+            ).start()
+        elif action_id == "ler-critica":
+            threading.Thread(
+                target=self._core.read_current_critical, daemon=True
+            ).start()
+
     def _handle_toggle(self, critical=False, meeting=False):
         action = self._core.toggle(critical=critical, meeting=meeting)
         if action is ToggleAction.STOP_REQUESTED:
@@ -258,13 +280,18 @@ class TrayDaemon:
 def main():
     config = Config.load()
     log = setup_logging(config.base_dir / "daemon.log")
+    # Match the Wayland app_id to tomenotas.desktop so the taskbar/dock
+    # shows our icon (and groups the window under the launcher) instead
+    # of a generic one. On X11 the window icon (set in the window) covers
+    # it; StartupWMClass in the .desktop is the belt-and-suspenders.
+    GLib.set_prgname("tomenotas")
     # The daemon can be launched from any directory (terminal, autostart,
     # launcher) — including one that may cease to exist. Anchor the cwd
     # at base_dir so subprocesses (whisper/piper/arecord) never inherit
     # an invalid cwd (whisper-cli aborts if getcwd() fails).
     os.chdir(config.base_dir)
     log.info("daemon starting (tomenotas %s)", __version__)
-    notifier = Notifier()
+    notifier = Notifier(icon=config.icons_dir / "tomenotas-idle.svg")
     try:
         store = SqliteNoteStore(config.db_path, config.mirror_dir,
                                 mirror=config.mirror_enabled)
@@ -313,20 +340,45 @@ def main():
     )
     # criticals left over from the previous run re-arm on startup
     alarm.refresh()
+    # Pick the shortcut backend: gsettings (GNOME, in-app capture) or the
+    # GlobalShortcuts portal (KDE/others). The portal is wired after the
+    # app is built (it routes Activated into app.dispatch_shortcut).
+    session_bus = Gio.bus_get_sync(Gio.BusType.SESSION, None)
+    from .portal_backend import PortalBackend, portal_available  # noqa: E402
+    backend = choose_backend(
+        config.shortcut_backend,
+        os.environ.get("XDG_CURRENT_DESKTOP", ""),
+        portal_available(session_bus),
+    )
+    log.info("shortcut backend: %s", backend)
     shortcuts = ShortcutManager(config.bin_dir)
-    # First run from the .deb (no install.sh): register the default
-    # keybindings; no-op when they already exist (never overrides).
-    try:
-        registered = shortcuts.ensure_defaults()
-        if registered:
-            log.info("default keybindings registered: %s", registered)
-    except Exception as error:  # gsettings absent/broken must not kill us
-        log.warning("could not register default keybindings: %s", error)
+    if backend == "gsettings":
+        # First run from the .deb (no install.sh): register the default
+        # keybindings; no-op when they already exist (never overrides).
+        try:
+            registered = shortcuts.ensure_defaults()
+            if registered:
+                log.info("default keybindings registered: %s", registered)
+        except Exception as error:  # gsettings absent/broken must not kill us
+            log.warning("could not register default keybindings: %s", error)
     voices = VoiceManager(player, config.piper_model)
     models = ModelManager(transcriber, config.whisper_model,
                           config.models_dir, Downloader())
     app = TrayDaemon(core, config, store, player, notifier, shortcuts,
-                     voices, models, alarm, sound)
+                     voices, models, alarm, sound, backend=backend)
+    if backend == "portal":
+        # Global shortcuts via the portal — Activated routes into the
+        # same handlers as the D-Bus methods. Keep a reference alive.
+        try:
+            app._portal = PortalBackend(
+                on_activated=lambda sid: GLib.idle_add(
+                    lambda: (app.dispatch_shortcut(sid), False)[1]
+                ),
+                connection=session_bus,
+            )
+            app._portal.register()
+        except Exception as error:  # portal issues must not kill startup
+            log.warning("could not set up the shortcuts portal: %s", error)
     # First run (Fase A): models are downloaded by the app, not by
     # install.sh — open Configurações so the user can fetch them.
     if not transcriber.is_ready() or not voices.list_voices():

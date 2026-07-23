@@ -67,7 +67,12 @@ clients that die silently when it isn't running:
     stop/abort and `cleanup_stale()` clears any left by a crash),
     `transcriber.py` (whisper.cpp), `player.py` (Piper + paplay),
     `notify.py` (notify-send, `--app-name=Tomenotas`, click action),
-    `shortcuts.py` (gsettings keybindings + conflict detection),
+    `shortcuts.py` (gsettings keybindings + conflict detection — the
+    GNOME shortcut backend; the shared action catalog lives in
+    `domain/shortcuts.py`), `shortcuts_portal.py` (pure helpers for the
+    GlobalShortcuts portal backend: `choose_backend` selection,
+    `portal_definitions`, trigger translation — the D-Bus glue is
+    `ui/portal_backend.py`),
     `voices.py` (`VoiceManager` — lists installed Piper `.onnx` voices and
     switches the active one: applies to the Player and persists
     `piper_model` in config.json; `download_default` fetches the pt_BR
@@ -102,7 +107,10 @@ clients that die silently when it isn't running:
     startup aborts the daemon with a notification, leaving the db
     untouched.
   - **`ui/`** — the glue layer (`daemon.py`, `window.py`,
-    `settings_page.py`): GTK main loop, `AyatanaAppIndicator3` tray with
+    `settings_page.py`, `portal_backend.py` — GlobalShortcuts portal
+    D-Bus session/signal wiring for KDE, selected by `choose_backend`;
+    on GNOME the default is gsettings and this path is unused. Settings'
+    Atalhos section is capture-in-app on gsettings, read-only on portal): GTK main loop, `AyatanaAppIndicator3` tray with
     "Abrir"/"Configurações"/"Sair", D-Bus name `com.tomenotas.Daemon` at
     `/com/tomenotas/Daemon` with
     `ToggleRecording()`/`ToggleCriticalRecording()`/`ReadCurrentNote()`/

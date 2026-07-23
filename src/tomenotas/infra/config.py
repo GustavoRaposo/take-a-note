@@ -42,6 +42,8 @@ class Config:
     # critical-notes alarm (app/alarm.py)
     alarm_interval: int = 300  # seconds between notifications
     alarm_sound: Path | None = None  # None → freedesktop default below
+    # keyboard-shortcut backend: "auto" | "gsettings" | "portal"
+    shortcut_backend: str = "auto"
 
     def __post_init__(self):
         if self.whisper_bin is None:
@@ -151,7 +153,16 @@ class Config:
             alarm_interval=_int_or(data.get("alarm_interval"), 300),
             alarm_sound=path_for("alarm_sound", "TOMENOTAS_ALARM_SOUND",
                                  None),
+            shortcut_backend=_one_of(
+                os.environ.get("TOMENOTAS_SHORTCUT_BACKEND")
+                or data.get("shortcut_backend"),
+                ("auto", "gsettings", "portal"), "auto",
+            ),
         )
+
+
+def _one_of(raw, allowed: tuple, default: str) -> str:
+    return raw if raw in allowed else default
 
 
 def _int_or(raw, default: int) -> int:

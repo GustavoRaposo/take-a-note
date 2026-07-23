@@ -22,6 +22,17 @@ def test_send_uses_the_tomenotas_app_name():
     ]
 
 
+def test_send_includes_the_icon_when_set():
+    calls = []
+    notifier = Notifier(spawn=lambda cmd, **kw: calls.append(cmd),
+                        icon="/x/icons/tomenotas-idle.svg")
+    notifier.send("Título", "Corpo")
+    assert calls == [[
+        "notify-send", "--app-name=Tomenotas",
+        "--icon=/x/icons/tomenotas-idle.svg", "Título", "Corpo",
+    ]]
+
+
 def test_send_with_action_fires_callback_on_click():
     calls = []
     clicked = threading.Event()

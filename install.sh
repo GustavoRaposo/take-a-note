@@ -107,6 +107,7 @@ Icon=$DATA_DIR/icons/tomenotas-idle.svg
 Terminal=false
 Categories=Utility;Audio;
 Keywords=notas;voz;gravar;transcrever;tomenotas;
+StartupWMClass=tomenotas
 EOF
 
 echo "==> Configurando início automático no login..."
