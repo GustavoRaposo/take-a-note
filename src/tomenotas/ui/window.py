@@ -71,7 +71,12 @@ class NotesWindow(Gtk.Window):
         self._settings = SettingsPage(shortcuts, voices, models, store,
                                       config, alarm, sound, notifier,
                                       self)
-        self._stack.add_titled(self._settings, "config", "Configurações")
+        # Configurações grew several sections: scroll instead of clipping
+        settings_scroller = Gtk.ScrolledWindow()
+        settings_scroller.set_policy(Gtk.PolicyType.NEVER,
+                                     Gtk.PolicyType.AUTOMATIC)
+        settings_scroller.add(self._settings)
+        self._stack.add_titled(settings_scroller, "config", "Configurações")
         self._stack.connect("notify::visible-child", self._on_page_switch)
 
         # The Settings page's shortcut capture needs the window's
@@ -107,7 +112,8 @@ class NotesWindow(Gtk.Window):
             self._settings.refresh()
 
     def _on_key(self, _widget, event):
-        if self._stack.get_visible_child() is self._settings:
+        # the visible child is the ScrolledWindow wrapping the page
+        if self._stack.get_visible_child_name() == "config":
             return self._settings.handle_key(event)
         return False
 
@@ -528,12 +534,24 @@ class NotesWindow(Gtk.Window):
 
     # ---------------- Per-note tags (popover) ----------------
 
+    @staticmethod
+    def _popover_scroller(popover, box):
+        """Wraps the popover content: with many tags it scrolls instead
+        of growing past the screen."""
+        scroller = Gtk.ScrolledWindow()
+        scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
+        scroller.set_propagate_natural_height(True)
+        scroller.set_max_content_height(320)
+        scroller.add(box)
+        popover.add(scroller)
+        return scroller
+
     def _build_tags_popover(self, note, button):
         popover = Gtk.Popover()
         popover.set_relative_to(button)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4,
                       margin=8)
-        popover.add(box)
+        scroller = self._popover_scroller(popover, box)
 
         for name in self._store.tags():
             check = Gtk.CheckButton(label=name)
@@ -553,7 +571,7 @@ class NotesWindow(Gtk.Window):
         new_row.pack_start(add, False, False, 0)
         box.pack_start(new_row, False, False, 4)
 
-        box.show_all()
+        scroller.show_all()
         return popover
 
     def _build_pending_tags_popover(self, button):
@@ -563,7 +581,7 @@ class NotesWindow(Gtk.Window):
         popover.set_relative_to(button)
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4,
                       margin=8)
-        popover.add(box)
+        scroller = self._popover_scroller(popover, box)
 
         # existing tags plus the pending ones not yet in the store
         names = {name.lower(): name for name in self._store.tags()}
@@ -589,7 +607,7 @@ class NotesWindow(Gtk.Window):
         new_row.pack_start(add, False, False, 0)
         box.pack_start(new_row, False, False, 4)
 
-        box.show_all()
+        scroller.show_all()
         return popover
 
     def _on_pending_tag(self, check, name):
