@@ -216,11 +216,50 @@ CREATE VIRTUAL TABLE notes_fts USING fts5(
   `ler.sh`) leem `.txt` — decidir na v3: aposentá-los de vez ou gerar um
   espelho `.txt` somente-leitura para compatibilidade.
 
+### Migrations — evolução do esquema sem perda de dados
+
+Toda instalação/atualização precisa conviver com um banco que pode já
+existir de uma versão anterior. A estratégia:
+
+- **Versão do esquema no próprio banco**: `PRAGMA user_version` (nativo do
+  SQLite, sem tabela extra). Banco novo é criado já na versão mais
+  recente; banco existente informa em que versão parou.
+- **Migrations registradas no código** (`migrations.py` no núcleo): uma
+  lista ordenada e numerada — `1: esquema inicial`, `2: <próxima
+  alteração>`, ... **Cada alteração de estrutura do banco entra
+  obrigatoriamente como uma nova migration**; migrations já publicadas são
+  imutáveis (mudou de ideia = migration nova por cima, nunca editar a
+  antiga).
+- **Aplicação na inicialização do daemon** (não no install.sh — o daemon é
+  o único escritor do banco): abre o `notes.db`, compara `user_version`
+  com a versão alvo e aplica, em ordem, apenas as migrations que faltam.
+  Cada migration roda numa transação: ou aplica inteira, ou nada muda.
+- **Garantias contra perda de dados**:
+  - backup automático do arquivo antes de migrar
+    (`notes.db.bak-v<versão>-<data>`), mantendo os últimos N backups;
+  - migrations só usam operações preservadoras (`ALTER TABLE ... ADD`,
+    `CREATE TABLE`, copiar dados); remover/renomear coluna exige o padrão
+    "criar tabela nova → copiar dados → trocar" — nunca `DROP` com dados
+    sem cópia prévia;
+  - falha no meio → rollback da transação e o daemon avisa o usuário e
+    aborta a migração, deixando o banco intacto na versão anterior (o
+    backup cobre até corrupção de arquivo);
+  - o `uninstall.sh` continua preservando o banco por padrão (só
+    `--purge-notes` o remove).
+- **TDD das migrations**: para cada migration N, um teste monta um banco
+  real na versão N-1 **com dados**, migra, e verifica que os dados
+  continuam íntegros e a estrutura nova existe; mais testes de banco novo
+  (criação direta na última versão), de idempotência (rodar duas vezes não
+  muda nada) e do caminho de rollback.
+
 ### Critério de pronto
 
 Buscar por texto retorna resultados rankeados; tags e favoritos criados na
 UI persistem e filtram a lista; migração importa todas as notas existentes
-sem perda; combinação de filtros (texto + tag + favorito) funciona.
+sem perda; combinação de filtros (texto + tag + favorito) funciona;
+**atualizar o programa com um banco de versão anterior aplica as migrations
+pendentes automaticamente e nenhuma nota/tag/favorito se perde** (validado
+por teste com banco populado de versão antiga).
 
 ## Riscos e pontos em aberto
 
