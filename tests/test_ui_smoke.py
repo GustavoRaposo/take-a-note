@@ -43,6 +43,28 @@ def window(tmp_path):
 
     from tomenotas.infra.sound import AlarmSound
 
+    window = _make_window(tmp_path)
+    window.refresh()
+    # makes the stack children "visible" without mapping the window
+    # (Gtk.Stack won't switch to a child with visible=False)
+    window._notes_stack.show_all()
+    yield window
+    window.destroy()
+
+
+def _make_window(tmp_path, backend="gsettings"):
+    from tomenotas.app.alarm import CriticalAlarm
+    from tomenotas.infra.config import Config
+    from tomenotas.infra.downloads import Downloader, ModelManager
+    from tomenotas.infra.notes_db import SqliteNoteStore
+    from tomenotas.infra.notify import Notifier
+    from tomenotas.infra.player import Player
+    from tomenotas.infra.shortcuts import ShortcutManager
+    from tomenotas.infra.sound import AlarmSound
+    from tomenotas.infra.transcriber import Transcriber
+    from tomenotas.infra.voices import VoiceManager
+    from tomenotas.ui.window import NotesWindow
+
     store = SqliteNoteStore(tmp_path / "notes.db", tmp_path / "notes")
     store.save("nota de teste para o detalhe")
     player = Player(Path("/x/piper"), Path("/x/voz.onnx"), tmp_path / "t.wav")
@@ -52,7 +74,7 @@ def window(tmp_path):
     alarm = CriticalAlarm(store, notifier, sound,
                           schedule=lambda s, cb: 1, cancel=lambda h: None,
                           interval=300)
-    window = NotesWindow(
+    return NotesWindow(
         store,
         player,
         notifier,
@@ -65,13 +87,30 @@ def window(tmp_path):
         Config(base_dir=tmp_path / "dados"),
         alarm,
         sound,
+        backend=backend,
     )
-    window.refresh()
-    # makes the stack children "visible" without mapping the window
-    # (Gtk.Stack won't switch to a child with visible=False)
-    window._notes_stack.show_all()
-    yield window
-    window.destroy()
+
+
+def test_settings_capture_keys_in_gsettings_mode(tmp_path):
+    window = _make_window(tmp_path, backend="gsettings")
+    try:
+        window.refresh()
+        settings = window._settings
+        assert len(settings._buttons) == 6  # one capture button per action
+    finally:
+        window.destroy()
+
+
+def test_settings_are_read_only_in_portal_mode(tmp_path):
+    window = _make_window(tmp_path, backend="portal")
+    try:
+        window.refresh()  # must be safe with no capture buttons
+        settings = window._settings
+        assert settings._buttons == {}  # no in-app capture
+        # a stray key must not be captured (nothing is being assigned)
+        assert settings.handle_key(object()) is False
+    finally:
+        window.destroy()
 
 
 def test_rows_carry_the_note_and_activating_opens_the_detail(window):

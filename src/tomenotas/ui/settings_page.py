@@ -32,7 +32,7 @@ class SettingsPage(Gtk.Box):
     this page is visible."""
 
     def __init__(self, manager, voices, models, store, config, alarm,
-                 sound, notifier, window):
+                 sound, notifier, window, backend="gsettings"):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8,
                          margin=16)
         self._manager = manager
@@ -43,6 +43,9 @@ class SettingsPage(Gtk.Box):
         self._sound = sound
         self._notifier = notifier
         self._window = window  # parent of the conflict dialogs
+        # "gsettings" → capture keys in-app; "portal" → the system owns
+        # the key assignment, so we only show the shortcuts read-only
+        self._backend = backend
         self._capturing = None  # (action_id, button) while capturing
         self._reloading_voices = False  # suppress "changed" during rebuild
         self._reloading_models = False
@@ -57,15 +60,29 @@ class SettingsPage(Gtk.Box):
         self._buttons = {}
         for i, action in enumerate(self._manager.actions.values()):
             label = Gtk.Label(label=action.title, xalign=0)
-            button = Gtk.Button(label=self._button_label(action.id))
-            button.set_hexpand(True)
-            button.connect("clicked", self._on_assign, action.id)
             grid.attach(label, 0, i, 1, 1)
-            grid.attach(button, 1, i, 1, 1)
-            self._buttons[action.id] = button
+            if self._backend == "portal":
+                # read-only: the system assigns the keys, not the app
+                trigger = Gtk.Label(label=action.default, xalign=0)
+                trigger.get_style_context().add_class("dim-label")
+                grid.attach(trigger, 1, i, 1, 1)
+            else:
+                button = Gtk.Button(label=self._button_label(action.id))
+                button.set_hexpand(True)
+                button.connect("clicked", self._on_assign, action.id)
+                grid.attach(button, 1, i, 1, 1)
+                self._buttons[action.id] = button
 
-        hint = Gtk.Label(label="Clique num atalho e pressione a nova "
-                               "combinação de teclas (Esc cancela).")
+        if self._backend == "portal":
+            hint = Gtk.Label(
+                label="Neste ambiente, os atalhos são gerenciados pelo "
+                      "sistema. Ajuste as teclas nas Configurações de "
+                      "Atalhos Globais do seu desktop (os valores acima "
+                      "são apenas os sugeridos)."
+            )
+        else:
+            hint = Gtk.Label(label="Clique num atalho e pressione a nova "
+                                   "combinação de teclas (Esc cancela).")
         hint.get_style_context().add_class("dim-label")
         hint.set_line_wrap(True)
         hint.set_xalign(0)

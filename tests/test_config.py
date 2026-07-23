@@ -25,6 +25,22 @@ def test_defaults_derive_from_base_dir(tmp_path, monkeypatch):
     assert cfg.language == "pt"
 
 
+def test_shortcut_backend_defaults_to_auto():
+    assert Config().shortcut_backend == "auto"
+
+
+def test_load_reads_shortcut_backend(tmp_path):
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps({"shortcut_backend": "portal"}))
+    assert Config.load(config_file).shortcut_backend == "portal"
+
+
+def test_load_rejects_unknown_shortcut_backend(tmp_path):
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps({"shortcut_backend": "banana"}))
+    assert Config.load(config_file).shortcut_backend == "auto"
+
+
 def test_alarm_defaults():
     cfg = Config()
     assert cfg.alarm_interval == 300  # 5 minutes

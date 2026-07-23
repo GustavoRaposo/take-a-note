@@ -33,7 +33,7 @@ PERIODS = [
 
 class NotesWindow(Gtk.Window):
     def __init__(self, store, player, notifier, shortcuts, voices, models,
-                 config, alarm, sound):
+                 config, alarm, sound, backend="gsettings"):
         super().__init__(title="Tomenotas")
         self._store = store
         self._player = player
@@ -70,7 +70,7 @@ class NotesWindow(Gtk.Window):
         self._stack.add_titled(self._build_tags_page(), "tags", "Tags")
         self._settings = SettingsPage(shortcuts, voices, models, store,
                                       config, alarm, sound, notifier,
-                                      self)
+                                      self, backend=backend)
         # Configurações grew several sections: scroll instead of clipping
         settings_scroller = Gtk.ScrolledWindow()
         settings_scroller.set_policy(Gtk.PolicyType.NEVER,

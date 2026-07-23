@@ -1,18 +1,23 @@
-"""GNOME global shortcuts via gsettings custom-keybindings.
+"""GNOME shortcut backend: global shortcuts via gsettings
+custom-keybindings.
 
-Programmatic equivalent of what install.sh does at install time:
-registers the three shortcuts (record/list/read) and lets the Fase 3 UI
-change them. Uses the gsettings CLI through an injectable subprocess
-(same pattern as the other modules), which keeps the logic — including
-conflict detection — 100% testable.
+Registers the actions from the shared catalog (domain/shortcuts.py) and
+lets the settings UI change them, in-app. Uses the gsettings CLI through
+an injectable subprocess (same pattern as the other modules), which keeps
+the logic — including conflict detection — 100% testable. This is one of
+the (future) shortcut backends; a GlobalShortcuts portal backend for
+KDE/others is planned.
 
-Note: the action ids ("gravar"/"listar"/"ler") are part of the gsettings
-paths persisted on users' systems (tomenotas-<id>/) — do not rename them.
+Note: the action ids ("gravar"/"listar"/"ler"/...) are part of the
+gsettings paths persisted on users' systems (tomenotas-<id>/) — do not
+rename them.
 """
 
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+from ..domain.shortcuts import SHORTCUTS
 
 SCHEMA = "org.gnome.settings-daemon.plugins.media-keys"
 CUSTOM_SCHEMA = SCHEMA + ".custom-keybinding"
@@ -25,6 +30,26 @@ CONFLICT_SCHEMAS = [
     "org.gnome.mutter.keybindings",
     SCHEMA,
 ]
+
+# gsettings-specific per action: the client script it invokes and the
+# "name" shown in GNOME's shortcut settings. The portable bits (id,
+# title, default trigger) come from domain/shortcuts.py.
+_CLIENTS = {
+    "gravar": "tomenotas-hotkey-record",
+    "listar": "tomenotas-hotkey-window",
+    "ler": "tomenotas-hotkey-read",
+    "critica": "tomenotas-hotkey-critical",
+    "ler-critica": "tomenotas-hotkey-critical-read",
+    "reuniao": "tomenotas-hotkey-meeting",
+}
+_LABELS = {
+    "gravar": "Tomenotas - Gravar",
+    "listar": "Tomenotas - Listar",
+    "ler": "Tomenotas - Ler",
+    "critica": "Tomenotas - Critica",
+    "ler-critica": "Tomenotas - Ler Critica",
+    "reuniao": "Tomenotas - Reuniao",
+}
 
 
 @dataclass(frozen=True)
@@ -60,34 +85,13 @@ def _bindings_from(value: str) -> list[str]:
 class ShortcutManager:
     def __init__(self, bin_dir: Path, run=subprocess.run):
         self._run = run
+        # built from the shared catalog + the gsettings-specific mappings
         self.actions = {
-            "gravar": Action(
-                "gravar", "Tomenotas - Gravar", "Gravar/parar",
-                str(bin_dir / "tomenotas-hotkey-record"), "<Super>r",
-            ),
-            "listar": Action(
-                "listar", "Tomenotas - Listar", "Listar notas",
-                str(bin_dir / "tomenotas-hotkey-window"), "<Super>y",
-            ),
-            "ler": Action(
-                "ler", "Tomenotas - Ler", "Ler nota atual",
-                str(bin_dir / "tomenotas-hotkey-read"), "<Super>t",
-            ),
-            "critica": Action(
-                "critica", "Tomenotas - Critica", "Gravar nota crítica",
-                str(bin_dir / "tomenotas-hotkey-critical"), "<Super>i",
-            ),
-            "ler-critica": Action(
-                "ler-critica", "Tomenotas - Ler Critica",
-                "Ler crítica mais recente",
-                str(bin_dir / "tomenotas-hotkey-critical-read"), "<Super>k",
-            ),
-            "reuniao": Action(
-                "reuniao", "Tomenotas - Reuniao",
-                "Gravar reunião (mic + PC)",
-                str(bin_dir / "tomenotas-hotkey-meeting"),
-                "<Super>bracketleft",
-            ),
+            spec.id: Action(
+                spec.id, _LABELS[spec.id], spec.title,
+                str(bin_dir / _CLIENTS[spec.id]), spec.default,
+            )
+            for spec in SHORTCUTS
         }
 
     def _out(self, *args: str) -> str:
