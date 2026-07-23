@@ -150,6 +150,20 @@ class NotesWindow(Gtk.Window):
         self._period_combo.connect("changed", self._on_period_changed)
         filters.pack_start(self._period_combo, False, False, 0)
 
+        reload_button = Gtk.Button.new_from_icon_name(
+            "view-refresh-symbolic", Gtk.IconSize.BUTTON
+        )
+        reload_button.set_tooltip_text("Recarregar a lista de notas")
+        reload_button.connect("clicked", self._on_reload)
+        filters.pack_end(reload_button, False, False, 0)
+
+        new_button = Gtk.Button.new_from_icon_name(
+            "list-add-symbolic", Gtk.IconSize.BUTTON
+        )
+        new_button.set_tooltip_text("Nova nota escrita")
+        new_button.connect("clicked", self._on_new_note)
+        filters.pack_end(new_button, False, False, 0)
+
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         box.pack_start(scroller, True, True, 0)
@@ -167,6 +181,7 @@ class NotesWindow(Gtk.Window):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6,
                       margin=12)
         self._current_note = None
+        self._pending_tags = set()  # tags chosen while creating a note
 
         bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         box.pack_start(bar, False, False, 0)
@@ -199,12 +214,12 @@ class NotesWindow(Gtk.Window):
         play.connect("clicked", self._on_detail_play)
         bar.pack_start(play, False, False, 0)
 
-        delete = Gtk.Button.new_from_icon_name(
+        self._detail_delete = Gtk.Button.new_from_icon_name(
             "user-trash-symbolic", Gtk.IconSize.BUTTON
         )
-        delete.set_tooltip_text("Apagar esta nota")
-        delete.connect("clicked", self._on_detail_delete)
-        bar.pack_start(delete, False, False, 0)
+        self._detail_delete.set_tooltip_text("Apagar esta nota")
+        self._detail_delete.connect("clicked", self._on_detail_delete)
+        bar.pack_start(self._detail_delete, False, False, 0)
 
         scroller = Gtk.ScrolledWindow()
         scroller.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
@@ -238,10 +253,36 @@ class NotesWindow(Gtk.Window):
         self._detail_star.set_active(note.favorite)
         self._detail_star.handler_unblock(self._star_handler_id)
         self._paint_star(self._detail_star, note.favorite)
+        self._detail_star.set_sensitive(True)
+        self._detail_tags.set_sensitive(True)
+        self._detail_delete.set_sensitive(True)
         self._detail_tags.set_popover(
             self._build_tags_popover(note, self._detail_tags)
         )
         self._notes_stack.set_visible_child_name("detail")
+
+    def _open_new_note(self):
+        """Same detail view, empty, in create mode (_current_note is
+        None): Salvar creates the note via store.save."""
+        self._stop_playback()
+        self._current_note = None
+        self._detail_title.set_text("Nova nota")
+        self._editor.get_buffer().set_text("")
+        self._detail_star.handler_block(self._star_handler_id)
+        self._detail_star.set_active(False)
+        self._detail_star.handler_unblock(self._star_handler_id)
+        self._paint_star(self._detail_star, False)
+        # favorite/delete only make sense after the note exists; tags can
+        # be picked now and are applied right after Salvar
+        self._detail_star.set_sensitive(False)
+        self._detail_delete.set_sensitive(False)
+        self._pending_tags = set()
+        self._detail_tags.set_sensitive(True)
+        self._detail_tags.set_popover(
+            self._build_pending_tags_popover(self._detail_tags)
+        )
+        self._notes_stack.set_visible_child_name("detail")
+        self._editor.grab_focus()
 
     def _editor_text(self):
         buffer = self._editor.get_buffer()
@@ -249,11 +290,19 @@ class NotesWindow(Gtk.Window):
         return buffer.get_text(start, end, True)
 
     def _on_detail_save(self, _button):
-        if self._current_note is None:
+        text = self._editor_text()
+        if self._current_note is None:  # create mode (_open_new_note)
+            if not text.strip():
+                self._notifier.send("Erro", "A nota está vazia.")
+                return
+            note = self._store.save(text)
+            for name in sorted(self._pending_tags):
+                self._store.add_tag(note.id, name)
+            self._notifier.send("Nota criada", preview(note.text))
+            self._leave_detail()
             return
         try:
-            self._store.update_text(self._current_note.id,
-                                    self._editor_text())
+            self._store.update_text(self._current_note.id, text)
         except ValueError as error:
             self._notifier.send("Erro", str(error))
             return
@@ -338,6 +387,14 @@ class NotesWindow(Gtk.Window):
         label = Gtk.Label(label=text)
         label.set_justify(Gtk.Justification.CENTER)
         return label
+
+    def _on_reload(self, _button):
+        # same as switching back to the page: new notes may bring new tags
+        self._rebuild_tag_dropdown()
+        self._reload_list()
+
+    def _on_new_note(self, _button):
+        self._open_new_note()
 
     def _on_tag_changed(self, combo):
         if self._reloading_tags:
@@ -447,6 +504,61 @@ class NotesWindow(Gtk.Window):
 
         box.show_all()
         return popover
+
+    def _build_pending_tags_popover(self, button):
+        """Create-mode variant of the tags popover: checks toggle the
+        _pending_tags set, applied to the store right after Salvar."""
+        popover = Gtk.Popover()
+        popover.set_relative_to(button)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4,
+                      margin=8)
+        popover.add(box)
+
+        # existing tags plus the pending ones not yet in the store
+        names = {name.lower(): name for name in self._store.tags()}
+        for name in self._pending_tags:
+            names.setdefault(name.lower(), name)
+        pending = {name.lower() for name in self._pending_tags}
+        for name in sorted(names.values(), key=str.lower):
+            check = Gtk.CheckButton(label=name)
+            # tag names are case-insensitive in the store (NOCASE)
+            check.set_active(name.lower() in pending)  # before connect
+            check.connect("toggled", self._on_pending_tag, name)
+            box.pack_start(check, False, False, 0)
+
+        new_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        entry = Gtk.Entry(placeholder_text="nova tag")
+        add = Gtk.Button(label="Adicionar")
+        add.connect("clicked", self._on_new_pending_tag, entry)
+        entry.connect(
+            "activate",
+            lambda e: self._on_new_pending_tag(add, e),
+        )
+        new_row.pack_start(entry, True, True, 0)
+        new_row.pack_start(add, False, False, 0)
+        box.pack_start(new_row, False, False, 4)
+
+        box.show_all()
+        return popover
+
+    def _on_pending_tag(self, check, name):
+        if check.get_active():
+            self._pending_tags.add(name)
+        else:  # drop any case variant (tag names are NOCASE)
+            self._pending_tags = {
+                t for t in self._pending_tags if t.lower() != name.lower()
+            }
+
+    def _on_new_pending_tag(self, _button, entry):
+        name = entry.get_text().strip()
+        if not name:
+            return
+        self._pending_tags.add(name)
+        entry.set_text("")
+        # rebuild so the new tag shows up checked in the list
+        self._detail_tags.set_popover(
+            self._build_pending_tags_popover(self._detail_tags)
+        )
 
     def _on_note_tag(self, check, note, name):
         if check.get_active():
