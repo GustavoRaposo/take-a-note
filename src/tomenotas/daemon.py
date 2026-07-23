@@ -7,6 +7,7 @@ pyproject.toml) e é validada manualmente — ver "Testing changes" no
 CLAUDE.md.
 """
 
+import os
 import signal
 import sys
 import threading
@@ -232,6 +233,11 @@ class TrayDaemon:
 def main():
     config = Config.load()
     log = setup_logging(config.base_dir / "daemon.log")
+    # O daemon pode ser lançado de qualquer diretório (terminal, autostart,
+    # lançador) — inclusive de um que deixe de existir depois. Ancora o cwd
+    # no base_dir para que os subprocessos (whisper/piper/arecord) nunca
+    # herdem um cwd inválido (o whisper-cli aborta se getcwd() falhar).
+    os.chdir(config.base_dir)
     log.info("daemon iniciando (tomenotas %s)", __version__)
     notifier = Notifier()
     try:
