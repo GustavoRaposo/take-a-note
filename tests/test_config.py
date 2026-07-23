@@ -25,6 +25,37 @@ def test_defaults_derive_from_base_dir(tmp_path, monkeypatch):
     assert cfg.language == "pt"
 
 
+def test_streaming_defaults():
+    cfg = Config()
+    assert cfg.stream_enabled is False
+    assert cfg.stream_model == "base"
+    # stream binary sits next to whisper-cli
+    assert cfg.whisper_stream_bin == cfg.whisper_bin.parent / "whisper-stream"
+
+
+def test_stream_model_path_lives_in_models_dir():
+    cfg = Config(base_dir=Path("/x/dados"))
+    assert cfg.stream_model_path == Path("/x/dados/models/ggml-base.bin")
+
+
+def test_load_reads_streaming_settings(tmp_path):
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps({
+        "stream_enabled": True,
+        "stream_model": "tiny",
+    }))
+    cfg = Config.load(config_file)
+    assert cfg.stream_enabled is True
+    assert cfg.stream_model == "tiny"
+
+
+def test_load_rejects_unknown_stream_model(tmp_path):
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps({"stream_model": "medium"}))
+    # only tiny/base make sense for real-time; anything else → base
+    assert Config.load(config_file).stream_model == "base"
+
+
 def test_shortcut_backend_defaults_to_auto():
     assert Config().shortcut_backend == "auto"
 

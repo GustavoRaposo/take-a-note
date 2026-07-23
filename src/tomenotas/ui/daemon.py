@@ -33,6 +33,8 @@ from ..infra.player import Player  # noqa: E402
 from ..infra.recorder import Recorder  # noqa: E402
 from ..infra.shortcuts import ShortcutManager  # noqa: E402
 from ..infra.shortcuts_portal import choose_backend  # noqa: E402
+from ..infra.stream_transcriber import StreamTranscriber  # noqa: E402
+from .live_window import LiveWindow  # noqa: E402
 from ..infra.sound import AlarmSound  # noqa: E402
 from ..infra.downloads import Downloader, ModelManager  # noqa: E402
 from ..infra.meeting_recorder import MeetingRecorder  # noqa: E402
@@ -86,6 +88,7 @@ class TrayDaemon:
         self._sound = sound
         self._backend = backend
         self._window = None  # created on demand at the first "Abrir"
+        self._live = None  # live-preview window, created on demand
         self._pulser = status.Pulser()
         self._pulsing = False
         self._setup_indicator()
@@ -94,6 +97,10 @@ class TrayDaemon:
         # runs in a thread, so the update is posted to the main thread.
         core.on_state_change = (
             lambda state: GLib.idle_add(self._on_state, state)
+        )
+        # Live preview text (from the stream reader thread → main loop)
+        core.on_stream_text = (
+            lambda text: GLib.idle_add(self._on_stream_text, text)
         )
         # Fase 5: clicking a notification opens the notes window
         notifier.on_activate = (
@@ -142,6 +149,9 @@ class TrayDaemon:
 
     def _on_state(self, state):
         """Applies the state to the icon/tooltip (main thread)."""
+        # recording ended → hide the live preview (the note comes next)
+        if state is State.IDLE and self._live is not None:
+            self._live.finish()
         hint = status.tooltip(state)
         self.indicator.set_title(f"Tomenotas — {hint}")
         if not self._has_icons:
@@ -173,7 +183,8 @@ class TrayDaemon:
                                        self._notifier, self._shortcuts,
                                        self._voices, self._models,
                                        self._config, self._alarm,
-                                       self._sound, backend=self._backend)
+                                       self._sound, backend=self._backend,
+                                       core=self._core)
         self._window.show_page(page)
 
     def on_settings(self, _item):
@@ -269,12 +280,23 @@ class TrayDaemon:
 
     def _handle_toggle(self, critical=False, meeting=False):
         action = self._core.toggle(critical=critical, meeting=meeting)
+        if action is ToggleAction.STARTED and self._core.is_streaming:
+            self._live_window().begin()  # open the live preview
         if action is ToggleAction.STOP_REQUESTED:
             # Transcription is slow — run it in a thread so the main loop
             # stays responsive (tray and D-Bus keep answering).
             threading.Thread(
                 target=self._core.finish_recording, daemon=True
             ).start()
+
+    def _live_window(self):
+        if self._live is None:
+            self._live = LiveWindow(self._config)
+        return self._live
+
+    def _on_stream_text(self, text):
+        self._live_window().update(text)
+        return False  # idle_add: do not repeat
 
 
 def main():
@@ -319,7 +341,11 @@ def main():
         notifier=notifier,
         player=player,
         meeting_recorder=meeting_recorder,
+        stream=StreamTranscriber(config.whisper_stream_bin,
+                                 config.stream_model_path,
+                                 language=config.language),
     )
+    core.stream_enabled = config.stream_enabled
     sound = AlarmSound(config.alarm_sound)
 
     def schedule_once(seconds, callback):

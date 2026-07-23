@@ -63,17 +63,25 @@ if [ "$SKIP_VENDOR" -eq 0 ] || [ ! -f "$VENDOR/whisper-cli" ]; then
             https://github.com/ggerganov/whisper.cpp "$WHISPER_SRC"
     fi
     # GGML_NATIVE=OFF: sem otimizações da CPU da máquina de build — o
-    # binário precisa rodar em qualquer amd64, não só na nossa
+    # binário precisa rodar em qualquer amd64, não só na nossa.
+    # WHISPER_SDL2=ON: também compila o whisper-stream (transcrição ao
+    # vivo) — exige libsdl2-dev no build; o binário depende de libSDL2 em
+    # runtime (declarada no Depends).
     cmake -B "$WHISPER_SRC/build" -S "$WHISPER_SRC" \
         -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
-        -DGGML_NATIVE=OFF > /dev/null
-    cmake --build "$WHISPER_SRC/build" --config Release -j --target whisper-cli > /dev/null
+        -DGGML_NATIVE=OFF -DWHISPER_SDL2=ON > /dev/null
+    cmake --build "$WHISPER_SRC/build" --config Release -j \
+        --target whisper-cli --target whisper-stream > /dev/null
     cp "$WHISPER_SRC/build/bin/whisper-cli" "$VENDOR/whisper-cli"
-    # binário não pode depender de libs do build (precisa rodar de /usr/lib)
-    if ldd "$VENDOR/whisper-cli" | grep -qE 'libwhisper|libggml'; then
-        echo "ERRO: whisper-cli ficou dinâmico (depende de libwhisper/libggml)." >&2
-        exit 1
-    fi
+    cp "$WHISPER_SRC/build/bin/whisper-stream" "$VENDOR/whisper-stream"
+    # whisper-cli/stream não podem depender das libs internas do build
+    # (rodam de /usr/lib); o whisper-stream pode depender de libSDL2 (ok)
+    for bin in whisper-cli whisper-stream; do
+        if ldd "$VENDOR/$bin" | grep -qE 'libwhisper|libggml'; then
+            echo "ERRO: $bin ficou dinâmico (depende de libwhisper/libggml)." >&2
+            exit 1
+        fi
+    done
 fi
 
 if [ "$SKIP_VENDOR" -eq 0 ] || [ ! -f "$VENDOR/piper/piper" ]; then
@@ -121,8 +129,10 @@ chmod 755 "$STAGING/usr/bin/"*
 
 # binários vendorizados
 cp "$VENDOR/whisper-cli" "$STAGING/usr/lib/tomenotas/whisper-cli"
+cp "$VENDOR/whisper-stream" "$STAGING/usr/lib/tomenotas/whisper-stream"
 cp -r "$VENDOR/piper" "$STAGING/usr/lib/tomenotas/piper"
 chmod 755 "$STAGING/usr/lib/tomenotas/whisper-cli" \
+          "$STAGING/usr/lib/tomenotas/whisper-stream" \
           "$STAGING/usr/lib/tomenotas/piper/piper"
 
 # licença (Debian policy: /usr/share/doc/<pacote>/copyright)
@@ -149,7 +159,7 @@ Section: sound
 Priority: optional
 Architecture: $ARCH
 Installed-Size: $INSTALLED_SIZE
-Depends: python3 (>= 3.10), python3-gi, python3-gi-cairo, gir1.2-gtk-3.0, gir1.2-ayatanaappindicator3-0.1, alsa-utils, libnotify-bin, pulseaudio-utils, pipewire-bin, libgomp1, libstdc++6, sound-theme-freedesktop
+Depends: python3 (>= 3.10), python3-gi, python3-gi-cairo, gir1.2-gtk-3.0, gir1.2-ayatanaappindicator3-0.1, alsa-utils, libnotify-bin, pulseaudio-utils, pipewire-bin, libgomp1, libstdc++6, libsdl2-2.0-0, sound-theme-freedesktop
 Maintainer: Gustavo Raposo <gustavo_f.raposo@hotmail.com>
 Description: Assistente pessoal de notas de voz (STT/TTS offline)
  Grave notas de voz com um atalho global (Super+R), transcritas

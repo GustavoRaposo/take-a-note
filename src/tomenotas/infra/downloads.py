@@ -130,12 +130,16 @@ class ModelManager:
         # keep it in ~/whisper.cpp/models via config.json)
         return size == self.current_size() and self._current.exists()
 
-    def download(self, size: str, on_progress=None) -> Path:
-        """Downloads the model (if needed) and makes it the active one."""
+    def download(self, size: str, on_progress=None,
+                 activate: bool = True) -> Path:
+        """Downloads the model. By default makes it the active main model;
+        activate=False just fetches it (used for the small live-stream
+        model, which must not replace the main transcription model)."""
         info = WHISPER_MODELS[size]
         path = self.downloader.fetch(info["url"], self.model_path(size),
                                      on_progress=on_progress)
-        self._activate(path)
+        if activate:
+            self._activate(path)
         return path
 
     def use(self, size: str) -> None:

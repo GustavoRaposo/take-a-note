@@ -17,7 +17,7 @@ log = logging.getLogger("tomenotas.core")
 
 class DaemonCore:
     def __init__(self, recorder, transcriber, notes, notifier, player=None,
-                 meeting_recorder=None):
+                 meeting_recorder=None, stream=None):
         self._recorder = recorder
         self._meeting_recorder = meeting_recorder  # mic + system audio
         self._active_recorder = recorder  # set per recording by toggle()
@@ -25,6 +25,9 @@ class DaemonCore:
         self._notes = notes
         self._notifier = notifier
         self._player = player  # used by read_current_note (Super+T)
+        self._stream = stream  # live-preview transcriber (whisper-stream)
+        self.stream_enabled = False  # set by the glue from config
+        self._streaming = False
         self._state = State.IDLE
         self._pending_critical = False  # mode of the recording in course
         self._pending_meeting = False
@@ -35,6 +38,13 @@ class DaemonCore:
         # Observer for saved notes (arms the critical alarm). Also fires
         # from the transcription thread — glue wraps with GLib.idle_add.
         self.on_note_saved = None
+        # Observer for the live preview text (fires from the stream reader
+        # thread — the glue wraps with GLib.idle_add).
+        self.on_stream_text = None
+
+    @property
+    def is_streaming(self) -> bool:
+        return self._streaming
 
     @property
     def state(self) -> State:
@@ -94,6 +104,7 @@ class DaemonCore:
             )
             return ToggleAction.FAILED
         self._set_state(State.RECORDING)
+        self._maybe_start_stream()
         self._notifier.send(
             "Gravação",
             "Gravando reunião (microfone + áudio do PC)... "
@@ -103,10 +114,34 @@ class DaemonCore:
         )
         return ToggleAction.STARTED
 
+    def _maybe_start_stream(self) -> None:
+        """Live preview (whisper-stream), in parallel with arecord. Only
+        for mic recordings (not meeting mode) and only if the small model
+        is present. Preview only — never affects the saved note."""
+        self._streaming = False
+        if (not self.stream_enabled or self._pending_meeting
+                or self._stream is None or not self._stream.is_ready()):
+            return
+        try:
+            self._stream.start(self._emit_stream_text)
+            self._streaming = True
+        except Exception as error:  # a broken preview must not break recording
+            log.warning("live stream failed to start: %s", error)
+
+    def _emit_stream_text(self, text: str) -> None:
+        if self.on_stream_text is not None:
+            self.on_stream_text(text)
+
+    def _stop_stream(self) -> None:
+        if self._stream is not None:
+            self._stream.stop()
+        self._streaming = False
+
     def finish_recording(self) -> None:
         """Stops arecord, transcribes and saves the note. Synchronous and
         slow — the glue calls this in a thread to keep the main loop
         responsive."""
+        self._stop_stream()  # end the live preview; the note comes next
         try:
             self._active_recorder.stop()
             text = self._transcriber.transcribe(
@@ -159,5 +194,6 @@ class DaemonCore:
 
     def shutdown(self) -> None:
         """Clean shutdown: aborts any pending recording without transcribing."""
+        self._stop_stream()
         self._active_recorder.abort()
         self._set_state(State.IDLE)

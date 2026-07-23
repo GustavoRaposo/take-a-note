@@ -26,6 +26,10 @@ rodando localmente na sua máquina.
 - **Modo reunião**: grave com Super+[ e o app captura **seu microfone e o
   áudio do PC ao mesmo tempo** (mixados) — ideal para transcrever
   reuniões com a sua fala e a dos outros participantes.
+- **Transcrição ao vivo**: ative em Configurações e, ao gravar (Super+R /
+  Super+I), abre uma janela mostrando o texto sendo transcrito enquanto
+  você fala (prévia com modelo pequeno). A nota final continua vindo do
+  modelo de transcrição escolhido.
 
 Cada gravação gera um arquivo `.txt` próprio. O áudio bruto (`.wav`) é
 temporário e apagado automaticamente depois da transcrição — só o texto fica

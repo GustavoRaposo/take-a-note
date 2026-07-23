@@ -65,8 +65,31 @@ class FakePlayer:
         self.played.append(text)
 
 
+class FakeStream:
+    def __init__(self, ready=True):
+        self._ready = ready
+        self.started = False
+        self.stopped = False
+        self._on_text = None
+
+    def is_ready(self):
+        return self._ready
+
+    def start(self, on_text):
+        self.started = True
+        self._on_text = on_text
+
+    def stop(self):
+        self.stopped = True
+
+    def emit(self, text):  # simulate whisper-stream output
+        if self._on_text:
+            self._on_text(text)
+
+
 def make_core(tmp_path, fails_on_start=False, transcription_error=None,
-              text="texto transcrito", player_error=None, ready=True):
+              text="texto transcrito", player_error=None, ready=True,
+              stream_enabled=False, stream_ready=True):
     audio_tmp = tmp_path / "tmp_recording.wav"
     recorder = FakeRecorder(audio_tmp, fails_on_start=fails_on_start)
     meeting = FakeRecorder(tmp_path / "tmp_meeting.wav")
@@ -77,7 +100,9 @@ def make_core(tmp_path, fails_on_start=False, transcription_error=None,
     notifier = FakeNotifier()
     core = DaemonCore(recorder, transcriber, notes, notifier,
                       player=FakePlayer(error=player_error),
-                      meeting_recorder=meeting)
+                      meeting_recorder=meeting,
+                      stream=FakeStream(ready=stream_ready))
+    core.stream_enabled = stream_enabled
     return core, recorder, transcriber, notes, notifier
 
 
@@ -292,6 +317,73 @@ def test_shutdown_aborts_the_active_meeting_recorder(tmp_path):
     core.shutdown()
     assert meeting.aborted
     assert not mic.aborted
+
+
+def test_live_stream_starts_with_recording_when_enabled(tmp_path):
+    core, _, _, _, _ = make_core(tmp_path, stream_enabled=True)
+    texts = []
+    core.on_stream_text = texts.append
+
+    core.toggle()  # idle -> recording
+    assert core._stream.started
+    assert core.is_streaming
+    core._stream.emit("olá ao vivo")
+    assert texts == ["olá ao vivo"]
+
+
+def test_live_stream_stays_off_when_disabled(tmp_path):
+    core, _, _, _, _ = make_core(tmp_path, stream_enabled=False)
+    core.toggle()
+    assert not core._stream.started
+    assert not core.is_streaming
+
+
+def test_live_stream_stays_off_in_meeting_mode(tmp_path):
+    # meeting captures system audio via a mix; whisper-stream only hears
+    # the mic, so streaming is skipped for meeting recordings
+    core, _, _, _, _ = make_core(tmp_path, stream_enabled=True)
+    core.toggle(meeting=True)
+    assert not core._stream.started
+
+
+def test_live_stream_skipped_when_small_model_missing(tmp_path):
+    core, _, _, _, _ = make_core(tmp_path, stream_enabled=True,
+                                 stream_ready=False)
+    core.toggle()
+    assert not core._stream.started
+    assert not core.is_streaming
+
+
+def test_stream_start_failure_does_not_break_recording(tmp_path):
+    core, recorder, _, _, _ = make_core(tmp_path, stream_enabled=True)
+
+    def boom(_on_text):
+        raise RuntimeError("sem microfone para o stream")
+
+    core._stream.start = boom
+    action = core.toggle()
+
+    assert action is ToggleAction.STARTED  # recording proceeds
+    assert core.state is State.RECORDING
+    assert recorder.started
+    assert not core.is_streaming  # preview just didn't come up
+
+
+def test_finish_stops_the_live_stream(tmp_path):
+    core, recorder, _, _, _ = make_core(tmp_path, stream_enabled=True)
+    recorder.audio_tmp.write_bytes(b"RIFF")
+    core.toggle()
+    core.toggle()
+    core.finish_recording()
+    assert core._stream.stopped
+    assert not core.is_streaming
+
+
+def test_shutdown_stops_the_live_stream(tmp_path):
+    core, _, _, _, _ = make_core(tmp_path, stream_enabled=True)
+    core.toggle()
+    core.shutdown()
+    assert core._stream.stopped
 
 
 def test_shutdown_aborts_recording(tmp_path):
