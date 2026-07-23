@@ -56,15 +56,17 @@ O instalador:
 
 1. Instala dependências via `apt`: `alsa-utils`, `libnotify-bin`,
    `pulseaudio-utils`, ferramentas de build.
-2. Clona e compila o `whisper.cpp`, baixando o modelo escolhido (padrão:
-   `medium`).
-3. Baixa o binário do Piper e a voz `pt_BR-faber-medium`.
-4. Copia os scripts bash + `tomenotas-hotkey-record` para `~/bin`, instala o
-   daemon como pacote Python num venv (`~/.local/share/tomenotas/venv`) e
-   grava os caminhos do whisper em `~/.config/tomenotas/config.json`.
+2. Clona e compila o `whisper.cpp` (só o binário — o **modelo** é baixado
+   pelo próprio app no primeiro uso, em Configurações).
+3. Baixa o binário do Piper (a **voz** também é baixada pelo app no
+   primeiro uso).
+4. Copia os scripts bash + `tomenotas-hotkey-record` para `~/tomenotas`,
+   instala o daemon como pacote Python num venv
+   (`~/.local/share/tomenotas/venv`) e grava os caminhos do whisper em
+   `~/.config/tomenotas/config.json`.
 5. Configura os atalhos de teclado no GNOME via `gsettings`:
    - **Super+R** — gravar/parar (via daemon: só funciona com ele rodando)
-   - **Super+L** — listar notas
+   - **Super+Y** — listar notas
    - **Super+T** — ler nota atual
 
 ### Opções do instalador
@@ -73,7 +75,7 @@ O instalador:
 ./install.sh --skip-whisper       # não instala/compila o whisper.cpp
 ./install.sh --skip-piper         # não instala o Piper
 ./install.sh --skip-shortcuts     # não configura atalhos automaticamente
-./install.sh --model-size small   # tiny | base | small | medium | large
+./install.sh --skip-apt           # não roda apt (dependências já instaladas)
 ```
 
 ## Uso
@@ -82,7 +84,7 @@ O instalador:
    **menu de aplicativos** (procure "Tomenotas") — o lançador religa o
    daemon se preciso e abre a janela de notas. Manualmente:
    ```bash
-   ~/bin/tomenotas-daemon &
+   ~/tomenotas/tomenotas-daemon &
    ```
    O ícone reflete o estado: neutro = ocioso, **badge vermelho pulsando** =
    gravando, **badge âmbar pulsando** = transcrevendo.
@@ -103,9 +105,9 @@ O instalador:
    - **Configurações**: troque os 3 atalhos — clique no campo, pressione a
      nova combinação e pronto (efeito imediato; avisa se a combinação já
      estiver em uso por outro app).
-4. **Super+L** → abre a mesma janela de notas (só funciona com o daemon
-   rodando). Atenção: em muitos GNOME, Super+L já bloqueia a tela — se for
-   o seu caso, troque a combinação em Configurações.
+4. **Super+Y** → abre a mesma janela de notas (só funciona com o daemon
+   rodando). (O padrão era Super+L, trocado porque em muitos GNOME essa
+   combinação já bloqueia a tela.)
 5. **Super+T** → ouve a nota mais recente em voz alta (via daemon —
    só funciona com ele rodando).
 
@@ -115,11 +117,11 @@ Se algum atalho já estiver em uso por outro programa, ajuste em
 ## Onde ficam os arquivos
 
 ```
-~/bin/tomenotas-daemon          # daemon (link para o venv abaixo)
-~/bin/tomenotas-hotkey-record   # cliente D-Bus chamado pelo Super+R
-~/bin/tomenotas-hotkey-window   # cliente D-Bus chamado pelo Super+L
-~/bin/tomenotas-hotkey-read     # cliente D-Bus chamado pelo Super+T
-~/bin/tomenotas-open            # lançador: religa o daemon e abre a janela
+~/tomenotas/tomenotas-daemon          # daemon (link para o venv abaixo)
+~/tomenotas/tomenotas-hotkey-record   # cliente D-Bus chamado pelo Super+R
+~/tomenotas/tomenotas-hotkey-window   # cliente D-Bus chamado pelo Super+Y
+~/tomenotas/tomenotas-hotkey-read     # cliente D-Bus chamado pelo Super+T
+~/tomenotas/tomenotas-open            # lançador: religa o daemon e abre a janela
 ~/.local/share/applications/tomenotas.desktop  # entrada no menu de apps
 ~/.config/tomenotas/config.json # caminhos do whisper/piper (lidos pelo daemon)
 ~/.config/autostart/tomenotas.desktop  # inicia o daemon no login

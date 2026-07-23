@@ -54,6 +54,15 @@ class DaemonCore:
         return ToggleAction.BUSY
 
     def _start(self) -> ToggleAction:
+        # First-run: no point recording audio nobody can transcribe
+        if not self._transcriber.is_ready():
+            log.error("whisper model not downloaded yet")
+            self._notifier.send(
+                "Erro",
+                "O modelo de transcrição ainda não foi baixado. "
+                "Abra o Tomenotas e baixe-o em Configurações.",
+            )
+            return ToggleAction.FAILED
         try:
             self._recorder.start()
         except FileNotFoundError:

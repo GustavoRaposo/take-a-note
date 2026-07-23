@@ -16,16 +16,54 @@ log = logging.getLogger("tomenotas.config")
 
 CONFIG_PATH = Path("~/.config/tomenotas/config.json").expanduser()
 
+# .deb install locations (Fase B): when the package is installed, the
+# binaries/clients/icons live here and win the home-dir defaults below.
+SYSTEM_LIB_DIR = Path("/usr/lib/tomenotas")
+SYSTEM_BIN_DIR = Path("/usr/bin")
+SYSTEM_SHARE_DIR = Path("/usr/share/tomenotas")
+
 
 @dataclass(frozen=True)
 class Config:
-    whisper_bin: Path = Path.home() / "whisper.cpp/build/bin/whisper-cli"
-    whisper_model: Path = Path.home() / "whisper.cpp/models/ggml-medium.bin"
-    piper_bin: Path = Path.home() / "piper/piper"
-    piper_model: Path = Path.home() / "piper/pt_BR-faber-medium.onnx"
+    # None → resolved in __post_init__: system (.deb) paths when
+    # installed, otherwise the install.sh home-dir layout
+    whisper_bin: Path | None = None
+    # None → resolved to models_dir in __post_init__ (models are
+    # downloaded on first run; old installs point elsewhere via json)
+    whisper_model: Path | None = None
+    piper_bin: Path | None = None
+    piper_model: Path | None = None
     base_dir: Path = Path.home() / ".local/share/tomenotas"
-    bin_dir: Path = Path.home() / "bin"
+    bin_dir: Path | None = None
     language: str = "pt"
+
+    def __post_init__(self):
+        if self.whisper_bin is None:
+            system = SYSTEM_LIB_DIR / "whisper-cli"
+            object.__setattr__(self, "whisper_bin",
+                               system if system.exists() else
+                               Path.home() / "whisper.cpp/build/bin/whisper-cli")
+        if self.piper_bin is None:
+            system = SYSTEM_LIB_DIR / "piper" / "piper"
+            object.__setattr__(self, "piper_bin",
+                               system if system.exists() else
+                               Path.home() / "piper/piper")
+        if self.bin_dir is None:
+            # where the hotkey clients live (targets of the keybindings)
+            system = SYSTEM_BIN_DIR / "tomenotas-hotkey-record"
+            object.__setattr__(self, "bin_dir",
+                               SYSTEM_BIN_DIR if system.exists() else
+                               Path.home() / "tomenotas")
+        if self.whisper_model is None:
+            object.__setattr__(self, "whisper_model",
+                               self.models_dir / "ggml-medium.bin")
+        if self.piper_model is None:
+            object.__setattr__(self, "piper_model",
+                               self.models_dir / "pt_BR-faber-medium.onnx")
+
+    @property
+    def models_dir(self) -> Path:
+        return self.base_dir / "models"
 
     @property
     def notes_dir(self) -> Path:
@@ -41,7 +79,11 @@ class Config:
 
     @property
     def icons_dir(self) -> Path:
-        return self.base_dir / "icons"
+        local = self.base_dir / "icons"  # install.sh (venv) layout wins
+        if local.is_dir():
+            return local
+        system = SYSTEM_SHARE_DIR / "icons"  # .deb layout
+        return system if system.is_dir() else local
 
     @property
     def db_path(self) -> Path:
@@ -65,7 +107,8 @@ class Config:
 
         default = cls()
 
-        def path_for(key: str, env_var: str, default_value: Path) -> Path:
+        def path_for(key: str, env_var: str,
+                     default_value: Path | None) -> Path | None:
             raw = os.environ.get(env_var) or data.get(key)
             return Path(raw).expanduser() if raw else default_value
 
@@ -73,12 +116,13 @@ class Config:
             whisper_bin=path_for(
                 "whisper_bin", "TOMENOTAS_WHISPER_BIN", default.whisper_bin
             ),
+            # None → __post_init__ derives from the loaded base_dir
             whisper_model=path_for(
-                "whisper_model", "TOMENOTAS_WHISPER_MODEL", default.whisper_model
+                "whisper_model", "TOMENOTAS_WHISPER_MODEL", None
             ),
             piper_bin=path_for("piper_bin", "TOMENOTAS_PIPER_BIN", default.piper_bin),
             piper_model=path_for(
-                "piper_model", "TOMENOTAS_PIPER_MODEL", default.piper_model
+                "piper_model", "TOMENOTAS_PIPER_MODEL", None
             ),
             base_dir=path_for("base_dir", "TOMENOTAS_BASE_DIR", default.base_dir),
             bin_dir=path_for("bin_dir", "TOMENOTAS_BIN_DIR", default.bin_dir),
@@ -86,3 +130,22 @@ class Config:
             or data.get("language")
             or default.language,
         )
+
+
+def update_config_file(key: str, value: str, path: Path | None = None) -> None:
+    """Sets a single key in config.json, preserving the other keys
+    (creating the file if needed). Invalid content is rewritten with a
+    warning — the same tolerance Config.load has when reading."""
+    path = path or CONFIG_PATH
+    data: dict = {}
+    if path.is_file():
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            log.warning("invalid config at %s, rewriting", path)
+            data = {}
+    if not isinstance(data, dict):
+        data = {}
+    data[key] = value
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(data, indent=2) + "\n", encoding="utf-8")

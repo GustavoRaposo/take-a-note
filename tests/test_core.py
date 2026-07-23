@@ -30,10 +30,14 @@ class FakeRecorder:
 
 
 class FakeTranscriber:
-    def __init__(self, text="texto transcrito", error=None):
+    def __init__(self, text="texto transcrito", error=None, ready=True):
         self.text = text
         self.error = error
+        self.ready = ready
         self.transcribed = []
+
+    def is_ready(self):
+        return self.ready
 
     def transcribe(self, wav_path):
         self.transcribed.append(wav_path)
@@ -62,10 +66,11 @@ class FakePlayer:
 
 
 def make_core(tmp_path, fails_on_start=False, transcription_error=None,
-              text="texto transcrito", player_error=None):
+              text="texto transcrito", player_error=None, ready=True):
     audio_tmp = tmp_path / "tmp_recording.wav"
     recorder = FakeRecorder(audio_tmp, fails_on_start=fails_on_start)
-    transcriber = FakeTranscriber(text=text, error=transcription_error)
+    transcriber = FakeTranscriber(text=text, error=transcription_error,
+                                  ready=ready)
     notes = SqliteNoteStore(tmp_path / "notes.db", tmp_path / "notes",
                             now=lambda: datetime(2026, 7, 22, 15, 0, 38))
     notifier = FakeNotifier()
@@ -93,6 +98,19 @@ def test_toggle_without_arecord_warns_and_stays_idle(tmp_path):
     assert notifier.messages == [
         ("Erro", "arecord não encontrado. Instale o pacote alsa-utils.")
     ]
+
+
+def test_toggle_without_model_warns_and_does_not_record(tmp_path):
+    core, recorder, _, _, notifier = make_core(tmp_path, ready=False)
+    action = core.toggle()
+    assert action is ToggleAction.FAILED
+    assert core.state is State.IDLE
+    assert not recorder.started  # never even touched the microphone
+    assert notifier.messages == [(
+        "Erro",
+        "O modelo de transcrição ainda não foi baixado. "
+        "Abra o Tomenotas e baixe-o em Configurações.",
+    )]
 
 
 def test_toggle_while_recording_requests_stop(tmp_path):

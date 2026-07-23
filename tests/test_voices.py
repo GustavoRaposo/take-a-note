@@ -104,6 +104,43 @@ def test_set_voice_with_invalid_config_rewrites_it(tmp_path, caplog):
     assert "invalid config" in caplog.text
 
 
+def test_download_default_fetches_pair_and_activates_the_voice(tmp_path):
+    from tomenotas.infra.downloads import DEFAULT_VOICE
+
+    class FakeDownloader:
+        def __init__(self):
+            self.fetched = []
+
+        def fetch(self, url, dest, on_progress=None):
+            self.fetched.append(url)
+            Path(dest).parent.mkdir(parents=True, exist_ok=True)
+            Path(dest).write_bytes(b"data")
+            if on_progress:
+                on_progress(4, 4)
+            return Path(dest)
+
+    piper_dir = tmp_path / "piper"
+    piper_dir.mkdir()
+    player = FakePlayer()
+    manager = VoiceManager(player, piper_dir / "pt_BR-faber-medium.onnx",
+                           config_path=tmp_path / "config.json")
+
+    progress = []
+    name = manager.download_default(FakeDownloader(),
+                                    on_progress=lambda d, t: progress.append((d, t)))
+
+    assert name == "pt_BR-faber-medium"
+    assert manager.current_voice() == "pt_BR-faber-medium"
+    assert player.models == [piper_dir / "pt_BR-faber-medium.onnx"]
+    assert (piper_dir / "pt_BR-faber-medium.onnx.json").exists()
+    assert progress
+    assert DEFAULT_VOICE["name"] == "pt_BR-faber-medium"
+    cfg_piper = json.loads(
+        (tmp_path / "config.json").read_text(encoding="utf-8")
+    )["piper_model"]
+    assert cfg_piper == str(piper_dir / "pt_BR-faber-medium.onnx")
+
+
 def test_set_voice_with_non_dict_config_rewrites_it(tmp_path):
     manager, _ = make(tmp_path)
     config_file = tmp_path / "config" / "config.json"

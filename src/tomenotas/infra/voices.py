@@ -7,11 +7,11 @@ immediately to the injected Player (next play() uses it) and persists
 install.sh.
 """
 
-import json
 import logging
 from pathlib import Path
 
-from .config import CONFIG_PATH
+from .config import CONFIG_PATH, update_config_file
+from .downloads import download_voice
 
 log = logging.getLogger("tomenotas.voices")
 
@@ -46,24 +46,13 @@ class VoiceManager:
             raise ValueError(f"Voz não encontrada: {path}")
         self._current = path
         self._player.set_model(path)
-        self._persist(path)
+        update_config_file("piper_model", str(path), self._config_path)
         log.info("voice switched to %s", name)
 
-    def _persist(self, path: Path) -> None:
-        data = {}
-        if self._config_path.is_file():
-            try:
-                data = json.loads(
-                    self._config_path.read_text(encoding="utf-8")
-                )
-            except (json.JSONDecodeError, OSError):
-                log.warning("invalid config at %s, rewriting",
-                            self._config_path)
-                data = {}
-        if not isinstance(data, dict):
-            data = {}
-        data["piper_model"] = str(path)
-        self._config_path.parent.mkdir(parents=True, exist_ok=True)
-        self._config_path.write_text(
-            json.dumps(data, indent=2) + "\n", encoding="utf-8"
-        )
+    def download_default(self, downloader, on_progress=None) -> str:
+        """First-run helper: downloads the default pt_BR voice pair into
+        voices_dir and activates it. Returns the voice name."""
+        path = download_voice(downloader, self.voices_dir,
+                              on_progress=on_progress)
+        self.set_voice(path.stem)
+        return path.stem

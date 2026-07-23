@@ -1,6 +1,6 @@
 #!/bin/bash
 # tomenotas-hotkey-window
-# Cliente D-Bus leve — alvo do atalho de teclado de listar (Super+L).
+# Cliente D-Bus leve — alvo do atalho de teclado de listar (Super+Y).
 # Só chama ShowWindow() no daemon, que abre a janela de notas do Tomenotas;
 # se o daemon não estiver rodando, a chamada falha em silêncio e nada
 # acontece (atalho só funciona com o app aberto).

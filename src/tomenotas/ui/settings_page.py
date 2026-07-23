@@ -3,8 +3,10 @@ sections:
 
 - Atalhos: keyboard shortcut capture, delegated to the (tested)
   ShortcutManager, which writes to gsettings with immediate effect.
-- Voz: Piper voice picker, delegated to the (tested) VoiceManager,
-  which applies to the Player and persists in config.json.
+- Voz: Piper voice picker (VoiceManager) + first-run download of the
+  default pt_BR voice.
+- Modelo de transcrição: whisper model download/switch (ModelManager,
+  first-run flow of Fase A — models are no longer shipped by install.sh).
 
 Glue layer, outside the coverage metric — do not let logic grow here.
 
@@ -13,25 +15,32 @@ shortcut is captured by the shell before it reaches the window — to
 change it, press a different combination.
 """
 
+import threading
+
 import gi
 
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
+
+from ..domain.errors import DownloadError  # noqa: E402
+from ..infra.downloads import WHISPER_MODELS  # noqa: E402
 
 
 class SettingsPage(Gtk.Box):
     """The main window forwards key-press-event to handle_key() while
     this page is visible."""
 
-    def __init__(self, manager, voices, notifier, window):
+    def __init__(self, manager, voices, models, notifier, window):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8,
                          margin=16)
         self._manager = manager
         self._voices = voices
+        self._models = models
         self._notifier = notifier
         self._window = window  # parent of the conflict dialogs
         self._capturing = None  # (action_id, button) while capturing
         self._reloading_voices = False  # suppress "changed" during rebuild
+        self._reloading_models = False
 
         # ---------------- Section: Atalhos ----------------
 
@@ -84,6 +93,47 @@ class SettingsPage(Gtk.Box):
         voice_hint.set_xalign(0)
         self.pack_start(voice_hint, False, False, 0)
 
+        # First-run: no voice installed yet — offer the default download
+        self._voice_download = Gtk.Button(label="Baixar voz padrão (pt_BR)")
+        self._voice_download.set_no_show_all(True)
+        self._voice_download.connect("clicked", self._on_voice_download)
+        self.pack_start(self._voice_download, False, False, 0)
+
+        self._voice_progress = Gtk.ProgressBar(show_text=True)
+        self._voice_progress.set_no_show_all(True)
+        self.pack_start(self._voice_progress, False, False, 0)
+
+        # ---------------- Section: Modelo de transcrição ----------------
+
+        self.pack_start(self._section_label("Modelo de transcrição"),
+                        False, False, 8)
+
+        model_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
+                            spacing=12)
+        model_row.pack_start(Gtk.Label(label="Modelo Whisper", xalign=0),
+                             False, False, 0)
+        self._model_combo = Gtk.ComboBoxText()
+        self._model_combo.set_hexpand(True)
+        self._model_combo.connect("changed", self._on_model_changed)
+        model_row.pack_start(self._model_combo, True, True, 0)
+        self._model_button = Gtk.Button(label="Baixar")
+        self._model_button.connect("clicked", self._on_model_action)
+        model_row.pack_start(self._model_button, False, False, 0)
+        self.pack_start(model_row, False, False, 0)
+
+        self._model_progress = Gtk.ProgressBar(show_text=True)
+        self._model_progress.set_no_show_all(True)
+        self.pack_start(self._model_progress, False, False, 0)
+
+        model_hint = Gtk.Label(
+            label="Modelos maiores transcrevem melhor, porém mais devagar "
+                  "e ocupando mais espaço em disco."
+        )
+        model_hint.get_style_context().add_class("dim-label")
+        model_hint.set_line_wrap(True)
+        model_hint.set_xalign(0)
+        self.pack_start(model_hint, False, False, 0)
+
     @staticmethod
     def _section_label(text):
         label = Gtk.Label(xalign=0)
@@ -101,6 +151,7 @@ class SettingsPage(Gtk.Box):
         for action_id, button in self._buttons.items():
             button.set_label(self._button_label(action_id))
         self._reload_voices()
+        self._reload_models()
 
     # ---------------- Voice picker ----------------
 
@@ -108,11 +159,128 @@ class SettingsPage(Gtk.Box):
         self._reloading_voices = True  # rebuild is not a user choice
         try:
             self._voice_combo.remove_all()
-            for name in self._voices.list_voices():
+            names = self._voices.list_voices()
+            for name in names:
                 self._voice_combo.append(name, name)
             self._voice_combo.set_active_id(self._voices.current_voice())
         finally:
             self._reloading_voices = False
+        self._voice_download.set_visible(not names)
+
+    def _on_voice_download(self, button):
+        button.set_sensitive(False)
+        self._voice_progress.show()
+        threading.Thread(target=self._voice_download_worker,
+                         daemon=True).start()
+
+    def _voice_download_worker(self):
+        try:
+            name = self._voices.download_default(
+                self._models.downloader,
+                on_progress=self._progress_cb(self._voice_progress),
+            )
+        except (DownloadError, ValueError) as error:
+            GLib.idle_add(self._on_download_done, self._voice_progress,
+                          self._voice_download, "Erro", str(error))
+        else:
+            GLib.idle_add(self._on_download_done, self._voice_progress,
+                          self._voice_download, "Voz baixada",
+                          f"{name} pronta para uso.")
+
+    # ---------------- Whisper model ----------------
+
+    def _reload_models(self):
+        self._reloading_models = True  # rebuild is not a user choice
+        try:
+            self._model_combo.remove_all()
+            for size, info in WHISPER_MODELS.items():
+                self._model_combo.append(size, info["label"])
+            self._model_combo.set_active_id(self._models.current_size())
+        finally:
+            self._reloading_models = False
+        self._update_model_button()
+
+    def _on_model_changed(self, _combo):
+        if self._reloading_models:
+            return
+        self._update_model_button()
+
+    def _update_model_button(self):
+        size = self._model_combo.get_active_id()
+        if not size:
+            self._model_button.set_label("Baixar")
+            self._model_button.set_sensitive(False)
+            return
+        if not self._models.is_installed(size):
+            self._model_button.set_label("Baixar")
+            self._model_button.set_sensitive(True)
+        elif size == self._models.current_size():
+            self._model_button.set_label("Em uso ✓")
+            self._model_button.set_sensitive(False)
+        else:
+            self._model_button.set_label("Usar")
+            self._model_button.set_sensitive(True)
+
+    def _on_model_action(self, button):
+        size = self._model_combo.get_active_id()
+        if not size:
+            return
+        if self._models.is_installed(size):  # "Usar": just switch
+            try:
+                self._models.use(size)
+            except ValueError as error:
+                self._notifier.send("Erro", str(error))
+                return
+            self._notifier.send("Modelo alterado", size)
+            self._reload_models()
+            return
+        button.set_sensitive(False)
+        self._model_progress.show()
+        threading.Thread(target=self._model_download_worker, args=(size,),
+                         daemon=True).start()
+
+    def _model_download_worker(self, size):
+        try:
+            self._models.download(
+                size, on_progress=self._progress_cb(self._model_progress)
+            )
+        except DownloadError as error:
+            GLib.idle_add(self._on_download_done, self._model_progress,
+                          self._model_button, "Erro", str(error))
+        else:
+            GLib.idle_add(self._on_download_done, self._model_progress,
+                          self._model_button, "Modelo baixado",
+                          f"Modelo {size} baixado e ativado.")
+
+    # ---------------- Download plumbing ----------------
+
+    def _progress_cb(self, bar):
+        """Callback for the download thread: throttles to whole percent
+        steps and posts the update to the main thread."""
+        last = [-1]
+
+        def on_progress(done, total):
+            if not total:
+                return
+            pct = min(100, int(done * 100 / total))
+            if pct != last[0]:
+                last[0] = pct
+                GLib.idle_add(self._set_progress, bar, pct)
+
+        return on_progress
+
+    def _set_progress(self, bar, pct):
+        bar.set_fraction(pct / 100)
+        bar.set_text(f"{pct}%")
+        return False  # idle_add: do not repeat
+
+    def _on_download_done(self, bar, button, title, message):
+        bar.hide()
+        bar.set_fraction(0)
+        button.set_sensitive(True)
+        self._notifier.send(title, message)
+        self.refresh()
+        return False
 
     def _on_voice_help(self, _button):
         dialog = Gtk.MessageDialog(

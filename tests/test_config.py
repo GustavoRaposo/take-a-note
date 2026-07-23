@@ -13,17 +13,90 @@ def test_defaults_derive_from_base_dir():
     assert cfg.tts_tmp == Path("/x/dados/tmp_tts.wav")
     assert cfg.icons_dir == Path("/x/dados/icons")
     assert cfg.db_path == Path("/x/dados/notes.db")
+    assert cfg.models_dir == Path("/x/dados/models")
+    # models live in models_dir by default (downloaded on first run)
+    assert cfg.whisper_model == Path("/x/dados/models/ggml-medium.bin")
+    assert cfg.piper_model == Path("/x/dados/models/pt_BR-faber-medium.onnx")
     assert cfg.language == "pt"
 
 
-def test_piper_defaults():
+# ---------------- .deb (system install) awareness ----------------
+
+def test_system_install_wins_the_binary_defaults(tmp_path, monkeypatch):
+    """With the .deb installed (/usr/lib/tomenotas, /usr/bin clients),
+    the defaults must point there instead of the home-dir installs."""
+    from tomenotas.infra import config as config_mod
+
+    lib = tmp_path / "usr" / "lib" / "tomenotas"
+    (lib / "piper").mkdir(parents=True)
+    (lib / "whisper-cli").write_bytes(b"elf")
+    (lib / "piper" / "piper").write_bytes(b"elf")
+    usr_bin = tmp_path / "usr" / "bin"
+    usr_bin.mkdir(parents=True)
+    (usr_bin / "tomenotas-hotkey-record").write_text("#!/bin/bash\n")
+    monkeypatch.setattr(config_mod, "SYSTEM_LIB_DIR", lib)
+    monkeypatch.setattr(config_mod, "SYSTEM_BIN_DIR", usr_bin)
+
     cfg = Config()
+    assert cfg.whisper_bin == lib / "whisper-cli"
+    assert cfg.piper_bin == lib / "piper" / "piper"
+    assert cfg.bin_dir == usr_bin
+
+
+def test_without_system_install_home_defaults_apply(tmp_path, monkeypatch):
+    from tomenotas.infra import config as config_mod
+
+    monkeypatch.setattr(config_mod, "SYSTEM_LIB_DIR",
+                        tmp_path / "nao-existe")
+    monkeypatch.setattr(config_mod, "SYSTEM_BIN_DIR",
+                        tmp_path / "nao-existe-bin")
+    cfg = Config()
+    assert cfg.whisper_bin == Path.home() / "whisper.cpp/build/bin/whisper-cli"
     assert cfg.piper_bin == Path.home() / "piper/piper"
-    assert cfg.piper_model == Path.home() / "piper/pt_BR-faber-medium.onnx"
+    assert cfg.bin_dir == Path.home() / "tomenotas"
+
+
+def test_explicit_config_wins_over_system_install(tmp_path, monkeypatch):
+    from tomenotas.infra import config as config_mod
+
+    lib = tmp_path / "usr" / "lib" / "tomenotas"
+    lib.mkdir(parents=True)
+    (lib / "whisper-cli").write_bytes(b"elf")
+    monkeypatch.setattr(config_mod, "SYSTEM_LIB_DIR", lib)
+
+    cfg = Config(whisper_bin=Path("/opt/meu-whisper"))
+    assert cfg.whisper_bin == Path("/opt/meu-whisper")
+
+
+def test_icons_dir_falls_back_to_system_share(tmp_path, monkeypatch):
+    from tomenotas.infra import config as config_mod
+
+    share = tmp_path / "usr" / "share" / "tomenotas"
+    (share / "icons").mkdir(parents=True)
+    monkeypatch.setattr(config_mod, "SYSTEM_SHARE_DIR", share)
+
+    # user-local icons absent -> system icons dir
+    cfg = Config(base_dir=tmp_path / "dados")
+    assert cfg.icons_dir == share / "icons"
+
+    # user-local icons present (venv install) -> they win
+    (tmp_path / "dados" / "icons").mkdir(parents=True)
+    assert cfg.icons_dir == tmp_path / "dados" / "icons"
+
+
+def test_explicit_model_paths_win_over_the_derived_defaults():
+    cfg = Config(base_dir=Path("/x"),
+                 whisper_model=Path("/w/ggml-small.bin"),
+                 piper_model=Path("/p/voz.onnx"))
+    assert cfg.whisper_model == Path("/w/ggml-small.bin")
+    assert cfg.piper_model == Path("/p/voz.onnx")
 
 
 def test_bin_dir_default_and_override(tmp_path, monkeypatch):
-    assert Config().bin_dir == Path.home() / "bin"
+    from tomenotas.infra import config as config_mod
+
+    monkeypatch.setattr(config_mod, "SYSTEM_BIN_DIR", tmp_path / "nada")
+    assert Config().bin_dir == Path.home() / "tomenotas"
     monkeypatch.setenv("TOMENOTAS_BIN_DIR", "/opt/bin")
     assert Config.load(tmp_path / "nada.json").bin_dir == Path("/opt/bin")
 
@@ -79,4 +152,39 @@ def test_invalid_json_warns_and_uses_defaults(tmp_path, caplog):
     config_file.write_text("{ nada a ver")
     cfg = Config.load(config_file)
     assert cfg == Config()
+    assert "invalid config" in caplog.text
+
+
+# ---------------- update_config_file ----------------
+
+def test_update_config_file_creates_file_and_parents(tmp_path):
+    from tomenotas.infra.config import update_config_file
+
+    target = tmp_path / "sub" / "config.json"
+    update_config_file("piper_model", "/x/voz.onnx", target)
+    assert json.loads(target.read_text(encoding="utf-8")) == {
+        "piper_model": "/x/voz.onnx"
+    }
+
+
+def test_update_config_file_preserves_other_keys(tmp_path):
+    from tomenotas.infra.config import update_config_file
+
+    target = tmp_path / "config.json"
+    target.write_text(json.dumps({"whisper_bin": "/w", "language": "pt"}))
+    update_config_file("whisper_model", "/m.bin", target)
+    data = json.loads(target.read_text(encoding="utf-8"))
+    assert data == {"whisper_bin": "/w", "language": "pt",
+                    "whisper_model": "/m.bin"}
+
+
+def test_update_config_file_rewrites_invalid_content(tmp_path, caplog):
+    from tomenotas.infra.config import update_config_file
+
+    target = tmp_path / "config.json"
+    target.write_text("{ nada a ver")
+    update_config_file("language", "pt", target)
+    assert json.loads(target.read_text(encoding="utf-8")) == {
+        "language": "pt"
+    }
     assert "invalid config" in caplog.text

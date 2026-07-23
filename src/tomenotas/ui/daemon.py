@@ -31,6 +31,7 @@ from ..infra.notify import Notifier  # noqa: E402
 from ..infra.player import Player  # noqa: E402
 from ..infra.recorder import Recorder  # noqa: E402
 from ..infra.shortcuts import ShortcutManager  # noqa: E402
+from ..infra.downloads import Downloader, ModelManager  # noqa: E402
 from ..infra.transcriber import Transcriber  # noqa: E402
 from ..infra.voices import VoiceManager  # noqa: E402
 from .window import NotesWindow  # noqa: E402
@@ -63,7 +64,8 @@ INTROSPECTION_XML = """
 class TrayDaemon:
     def __init__(self, core: DaemonCore, config: Config,
                  store: SqliteNoteStore, player: Player, notifier: Notifier,
-                 shortcuts: ShortcutManager, voices: VoiceManager):
+                 shortcuts: ShortcutManager, voices: VoiceManager,
+                 models: ModelManager):
         self._core = core
         self._config = config
         self._store = store
@@ -71,6 +73,7 @@ class TrayDaemon:
         self._notifier = notifier
         self._shortcuts = shortcuts
         self._voices = voices
+        self._models = models
         self._window = None  # created on demand at the first "Abrir"
         self._pulser = status.Pulser()
         self._pulsing = False
@@ -157,7 +160,7 @@ class TrayDaemon:
         if self._window is None:
             self._window = NotesWindow(self._store, self._player,
                                        self._notifier, self._shortcuts,
-                                       self._voices)
+                                       self._voices, self._models)
         self._window.show_page(page)
 
     def on_settings(self, _item):
@@ -250,19 +253,40 @@ def main():
         notifier.send("Erro no banco de notas", str(error))
         sys.exit(1)
     player = Player(config.piper_bin, config.piper_model, config.tts_tmp)
+    transcriber = Transcriber(
+        config.whisper_bin, config.whisper_model, config.language
+    )
     core = DaemonCore(
         recorder=Recorder(config.audio_tmp),
-        transcriber=Transcriber(
-            config.whisper_bin, config.whisper_model, config.language
-        ),
+        transcriber=transcriber,
         notes=store,
         notifier=notifier,
         player=player,
     )
     shortcuts = ShortcutManager(config.bin_dir)
+    # First run from the .deb (no install.sh): register the default
+    # keybindings; no-op when they already exist (never overrides).
+    try:
+        registered = shortcuts.ensure_defaults()
+        if registered:
+            log.info("default keybindings registered: %s", registered)
+    except Exception as error:  # gsettings absent/broken must not kill us
+        log.warning("could not register default keybindings: %s", error)
     voices = VoiceManager(player, config.piper_model)
+    models = ModelManager(transcriber, config.whisper_model,
+                          config.models_dir, Downloader())
     app = TrayDaemon(core, config, store, player, notifier, shortcuts,
-                     voices)
+                     voices, models)
+    # First run (Fase A): models are downloaded by the app, not by
+    # install.sh — open Configurações so the user can fetch them.
+    if not transcriber.is_ready() or not voices.list_voices():
+        log.info("first run: models missing, opening Configurações")
+        notifier.send(
+            "Tomenotas",
+            "Primeiro uso: baixe o modelo de transcrição e a voz em "
+            "Configurações.",
+        )
+        GLib.idle_add(app.show_window, "config")
     # Ctrl+C in the terminal exits cleanly (useful when run by hand)
     signal.signal(signal.SIGINT, lambda *_: app.quit())
     Gtk.main()

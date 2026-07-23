@@ -53,7 +53,7 @@ def test_actions_point_to_the_right_commands():
     assert actions["listar"].command == "/home/x/bin/tomenotas-hotkey-window"
     assert actions["ler"].command == "/home/x/bin/tomenotas-hotkey-read"
     assert actions["gravar"].default == "<Super>r"
-    assert actions["listar"].default == "<Super>l"
+    assert actions["listar"].default == "<Super>y"
     assert actions["ler"].default == "<Super>t"
 
 
@@ -144,6 +144,37 @@ def test_conflict_with_another_custom_shortcut_by_name():
 def test_without_conflicts_returns_empty_list():
     manager = ShortcutManager(BIN, run=FakeGsettings())
     assert manager.list_conflicts("<Super>F12") == []
+
+
+def test_ensure_defaults_registers_only_missing_bindings():
+    # "gravar" already has a binding (user may have customized it):
+    # ensure_defaults must not touch it, only register the missing two
+    gs = FakeGsettings(
+        listing=f"['{RECORD_PATH}']",
+        entries={RECORD_PATH: {"binding": "'<Super>F9'"}},
+    )
+    manager = ShortcutManager(BIN, run=gs)
+    registered = manager.ensure_defaults()
+
+    assert registered == ["listar", "ler"]
+    assert manager.get_binding("gravar") == "<Super>F9"  # untouched
+    assert manager.get_binding("listar") == "<Super>y"
+    assert manager.get_binding("ler") == "<Super>t"
+    assert LIST_PATH in gs.listing
+
+
+def test_ensure_defaults_on_fresh_system_registers_all():
+    gs = FakeGsettings(listing="@as []")
+    manager = ShortcutManager(BIN, run=gs)
+    assert manager.ensure_defaults() == ["gravar", "listar", "ler"]
+    assert manager.get_binding("gravar") == "<Super>r"
+
+
+def test_ensure_defaults_is_idempotent():
+    gs = FakeGsettings(listing="@as []")
+    manager = ShortcutManager(BIN, run=gs)
+    manager.ensure_defaults()
+    assert manager.ensure_defaults() == []  # second run: nothing to do
 
 
 def test_scan_tolerates_varied_gsettings_formats():

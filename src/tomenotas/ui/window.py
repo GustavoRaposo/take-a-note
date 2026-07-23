@@ -32,7 +32,7 @@ PERIODS = [
 
 
 class NotesWindow(Gtk.Window):
-    def __init__(self, store, player, notifier, shortcuts, voices):
+    def __init__(self, store, player, notifier, shortcuts, voices, models):
         super().__init__(title="Tomenotas")
         self._store = store
         self._player = player
@@ -66,7 +66,8 @@ class NotesWindow(Gtk.Window):
 
         self._stack.add_titled(self._build_notes_page(), "notas", "Notas")
         self._stack.add_titled(self._build_tags_page(), "tags", "Tags")
-        self._settings = SettingsPage(shortcuts, voices, notifier, self)
+        self._settings = SettingsPage(shortcuts, voices, models, notifier,
+                                      self)
         self._stack.add_titled(self._settings, "config", "Configurações")
         self._stack.connect("notify::visible-child", self._on_page_switch)
 

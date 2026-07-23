@@ -16,3 +16,7 @@ class PlayerError(Exception):
 
 class MigrationError(Exception):
     pass
+
+
+class DownloadError(Exception):
+    pass

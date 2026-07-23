@@ -65,6 +65,31 @@ def test_missing_model_has_specific_message(tmp_path):
         t.transcribe(wav)
 
 
+def test_is_ready_reflects_model_presence(tmp_path):
+    t, _ = make(tmp_path, lambda cmd, **kw: None)
+    assert t.is_ready()
+    missing = Transcriber(Path("/w/bin"), tmp_path / "nao-baixado.bin")
+    assert not missing.is_ready()
+
+
+def test_set_model_switches_the_model_used_by_transcribe(tmp_path):
+    calls = []
+
+    def fake_run(cmd, **kwargs):
+        calls.append(cmd)
+        (tmp_path / "tmp_transcricao.txt").write_text("oi", encoding="utf-8")
+
+    t, wav = make(tmp_path, fake_run)
+    other = tmp_path / "ggml-small.bin"
+    other.write_bytes(b"ggml")
+
+    t.set_model(other)
+    t.transcribe(wav)
+
+    (cmd,) = calls
+    assert cmd[cmd.index("-m") + 1] == str(other)
+
+
 def test_missing_wav_suggests_checking_the_microphone(tmp_path):
     t, wav = make(tmp_path, lambda cmd, **kw: None)
     wav.unlink()  # arecord failed (e.g. no microphone), no audio produced

@@ -21,7 +21,8 @@ for arg in "$@"; do
     esac
 done
 
-BIN_DIR="$HOME/bin"
+BIN_DIR="$HOME/tomenotas"
+OLD_BIN_DIR="$HOME/bin"  # layout antigo (migração)
 DATA_DIR="$HOME/.local/share/tomenotas"
 WHISPER_DIR="$HOME/whisper.cpp"
 PIPER_DIR="$HOME/piper"
@@ -50,11 +51,14 @@ fi
 echo "==> Encerrando o daemon, se estiver rodando..."
 pkill -f "$BIN_DIR/tomenotas-daemon" 2>/dev/null
 
-echo "==> Removendo scripts de $BIN_DIR..."
-rm -f "$BIN_DIR/gravar.sh" "$BIN_DIR/listar.sh" "$BIN_DIR/ler.sh" \
-      "$BIN_DIR/tomenotas-daemon" "$BIN_DIR/tomenotas-hotkey-record" \
-      "$BIN_DIR/tomenotas-hotkey-window" "$BIN_DIR/tomenotas-hotkey-read" \
-      "$BIN_DIR/tomenotas-open"
+echo "==> Removendo scripts de $BIN_DIR (e do layout antigo em $OLD_BIN_DIR)..."
+for dir in "$BIN_DIR" "$OLD_BIN_DIR"; do
+    rm -f "$dir/gravar.sh" "$dir/listar.sh" "$dir/ler.sh" \
+          "$dir/tomenotas-daemon" "$dir/tomenotas-hotkey-record" \
+          "$dir/tomenotas-hotkey-window" "$dir/tomenotas-hotkey-read" \
+          "$dir/tomenotas-open"
+done
+rmdir "$BIN_DIR" 2>/dev/null  # só se ficou vazia (~/tomenotas é nossa)
 
 echo "==> Removendo venv do daemon, ícones, autostart e configuração..."
 rm -rf "$DATA_DIR/venv" "$DATA_DIR/icons" "$HOME/.config/tomenotas"

@@ -67,7 +67,7 @@ class ShortcutManager:
             ),
             "listar": Action(
                 "listar", "Tomenotas - Listar", "Listar notas",
-                str(bin_dir / "tomenotas-hotkey-window"), "<Super>l",
+                str(bin_dir / "tomenotas-hotkey-window"), "<Super>y",
             ),
             "ler": Action(
                 "ler", "Tomenotas - Ler", "Ler nota atual",
@@ -99,6 +99,20 @@ class ShortcutManager:
         self._out("set", target, "name", action.label)
         self._out("set", target, "command", action.command)
         self._out("set", target, "binding", binding)
+
+    def ensure_defaults(self) -> list[str]:
+        """First-run (Fase B): registers the default binding of every
+        action that has none yet. Never touches an existing binding (the
+        user may have customized it). The .deb cannot do this at install
+        time — postinst runs as root and gsettings is per-user — so the
+        daemon calls this on startup; it is a no-op afterwards. Returns
+        the ids of the actions registered."""
+        registered = []
+        for action_id, action in self.actions.items():
+            if not self.get_binding(action_id):
+                self.set_binding(action_id, action.default)
+                registered.append(action_id)
+        return registered
 
     def _register(self, path: str) -> None:
         current = self._out("get", SCHEMA, "custom-keybindings")

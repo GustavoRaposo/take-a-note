@@ -1,7 +1,9 @@
 #!/bin/bash
+# Garante bash mesmo se invocado como "sh install.sh" (dash não tem [[ )
+if [ -z "$BASH_VERSION" ]; then exec bash "$0" "$@"; fi
 # install.sh
 # Instala o sistema de notas de voz: dependências, whisper.cpp, Piper,
-# copia os scripts para ~/bin e configura os 3 atalhos de teclado no GNOME.
+# copia os scripts para ~/tomenotas e configura os 3 atalhos de teclado no GNOME.
 #
 # Uso:
 #   ./install.sh                     -> instala tudo com valores padrão
@@ -9,12 +11,13 @@
 #   ./install.sh --skip-piper        -> não baixa o Piper
 #   ./install.sh --skip-shortcuts    -> não mexe nos atalhos do GNOME
 #   ./install.sh --skip-apt          -> não roda apt (dependências já instaladas)
-#   ./install.sh --model-size small  -> escolhe o tamanho do modelo whisper
-#                                        (tiny, base, small, medium, large)
+#
+# Os modelos de STT (whisper) e TTS (voz do Piper) NÃO são baixados aqui:
+# o app oferece o download no primeiro uso, em Configurações (Fase A do
+# plano .deb no ROADMAP).
 
 set -e
 
-MODEL_SIZE="medium"
 SKIP_WHISPER=0
 SKIP_PIPER=0
 SKIP_SHORTCUTS=0
@@ -26,14 +29,12 @@ for arg in "$@"; do
         --skip-piper) SKIP_PIPER=1 ;;
         --skip-shortcuts) SKIP_SHORTCUTS=1 ;;
         --skip-apt) SKIP_APT=1 ;;
-        --model-size=*) MODEL_SIZE="${arg#*=}" ;;
-        --model-size) shift ;;
         *) ;;
     esac
 done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BIN_DIR="$HOME/bin"
+BIN_DIR="$HOME/tomenotas"
 DATA_DIR="$HOME/.local/share/tomenotas"
 NOTES_DIR="$DATA_DIR/notes"
 WHISPER_DIR="$HOME/whisper.cpp"
@@ -61,6 +62,11 @@ chmod +x "$BIN_DIR/tomenotas-hotkey-record" \
     "$BIN_DIR/tomenotas-open"
 # limpa scripts legados de instalações anteriores (aposentados)
 rm -f "$BIN_DIR/gravar.sh" "$BIN_DIR/listar.sh" "$BIN_DIR/ler.sh"
+# migração: instalações antigas colocavam tudo em ~/bin
+rm -f "$HOME/bin/gravar.sh" "$HOME/bin/listar.sh" "$HOME/bin/ler.sh" \
+    "$HOME/bin/tomenotas-daemon" "$HOME/bin/tomenotas-hotkey-record" \
+    "$HOME/bin/tomenotas-hotkey-window" "$HOME/bin/tomenotas-hotkey-read" \
+    "$HOME/bin/tomenotas-open"
 
 echo "==> Instalando o daemon (pacote Python em venv)..."
 VENV_DIR="$DATA_DIR/venv"
@@ -103,9 +109,7 @@ EOF
 # Caminhos padrão (as seções abaixo refinam quando instalam de verdade);
 # no fim, tudo vai para ~/.config/tomenotas/config.json, lido pelo daemon.
 WHISPER_BIN_PATH="$WHISPER_DIR/build/bin/whisper-cli"
-MODEL_FILE="$WHISPER_DIR/models/ggml-$MODEL_SIZE.bin"
 PIPER_BIN_PATH="$PIPER_DIR/piper"
-VOICE_MODEL="$PIPER_DIR/pt_BR-faber-medium.onnx"
 
 if [ "$SKIP_WHISPER" -eq 0 ]; then
     if [ -d "$WHISPER_DIR" ]; then
@@ -117,13 +121,9 @@ if [ "$SKIP_WHISPER" -eq 0 ]; then
         cmake --build "$WHISPER_DIR/build" --config Release -j
     fi
 
-    MODEL_FILE="$WHISPER_DIR/models/ggml-$MODEL_SIZE.bin"
-    if [ -f "$MODEL_FILE" ]; then
-        echo "==> Modelo $MODEL_SIZE já baixado."
-    else
-        echo "==> Baixando modelo whisper ($MODEL_SIZE)..."
-        bash "$WHISPER_DIR/models/download-ggml-model.sh" "$MODEL_SIZE"
-    fi
+    # Fase A do plano .deb: o modelo NÃO é mais baixado aqui — o app
+    # oferece o download (com barra de progresso) no primeiro uso, em
+    # Configurações. Modelos de instalações antigas continuam valendo.
 
     # Detecta o nome do binário (varia entre versões do whisper.cpp)
     if [ -f "$WHISPER_DIR/build/bin/whisper-cli" ]; then
@@ -152,37 +152,42 @@ if [ "$SKIP_PIPER" -eq 0 ]; then
         chmod +x "$PIPER_DIR/piper"
     fi
 
-    VOICE_MODEL="$PIPER_DIR/pt_BR-faber-medium.onnx"
-    if [ -f "$VOICE_MODEL" ]; then
-        echo "==> Voz pt_BR já baixada."
-    else
-        echo "==> Baixando voz em português (pt_BR-faber-medium)..."
-        BASE_URL="https://huggingface.co/rhasspy/piper-voices/resolve/main/pt/pt_BR/faber/medium"
-        wget -q -O "$VOICE_MODEL" "$BASE_URL/pt_BR-faber-medium.onnx"
-        wget -q -O "$VOICE_MODEL.json" "$BASE_URL/pt_BR-faber-medium.onnx.json"
-    fi
+    # Fase A do plano .deb: a voz NÃO é mais baixada aqui — o app oferece
+    # o download da voz padrão no primeiro uso, em Configurações.
 
 else
     echo "==> Pulando instalação do Piper (--skip-piper). Ajuste os caminhos em ~/.config/tomenotas/config.json"
 fi
 
-# O daemon lê os caminhos de ~/.config/tomenotas/config.json (nada de sed)
+# O daemon lê os caminhos de ~/.config/tomenotas/config.json (nada de sed).
+# Modelos só entram no json se já existirem (instalação antiga); sem eles,
+# o daemon usa os padrões (~/.local/share/tomenotas/models/) e oferece o
+# download no primeiro uso.
 echo "==> Gravando caminhos em ~/.config/tomenotas/config.json..."
 CONFIG_DIR="$HOME/.config/tomenotas"
 mkdir -p "$CONFIG_DIR"
-cat > "$CONFIG_DIR/config.json" <<EOF
-{
+python3 - "$CONFIG_DIR/config.json" <<EOF
+import glob, json, sys
+
+cfg = {
     "whisper_bin": "$WHISPER_BIN_PATH",
-    "whisper_model": "$MODEL_FILE",
     "piper_bin": "$PIPER_BIN_PATH",
-    "piper_model": "$VOICE_MODEL"
+    "bin_dir": "$BIN_DIR",
 }
+models = sorted(glob.glob("$WHISPER_DIR/models/ggml-*.bin"))
+voices = sorted(glob.glob("$PIPER_DIR/*.onnx"))
+if models:
+    cfg["whisper_model"] = models[0]
+if voices:
+    cfg["piper_model"] = voices[0]
+with open(sys.argv[1], "w", encoding="utf-8") as out:
+    out.write(json.dumps(cfg, indent=4) + "\n")
 EOF
 
 if [ "$SKIP_SHORTCUTS" -eq 0 ]; then
     echo "==> Configurando atalhos de teclado no GNOME..."
     echo "    Gravar/parar : Super+R"
-    echo "    Listar notas : Super+L"
+    echo "    Listar notas : Super+Y"
     echo "    Ler nota     : Super+T"
 
     BASE_PATH="/org/gnome/settings-daemon/plugins/media-keys"
@@ -191,7 +196,7 @@ if [ "$SKIP_SHORTCUTS" -eq 0 ]; then
     KEY_LER="$BASE_PATH/custom-keybindings/tomenotas-ler/"
 
     EXISTING=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings)
-    if [[ "$EXISTING" == "@as []" ]]; then
+    if [ "$EXISTING" = "@as []" ] || [ "$EXISTING" = "[]" ]; then
         NEW_LIST="['$KEY_GRAVAR', '$KEY_LISTAR', '$KEY_LER']"
     else
         # remove colchetes e adiciona os novos, evitando duplicar se já existirem
@@ -211,7 +216,7 @@ if [ "$SKIP_SHORTCUTS" -eq 0 ]; then
     # de gravar, só funciona enquanto o tomenotas-daemon estiver rodando.
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_LISTAR" name 'Tomenotas - Listar'
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_LISTAR" command "$BIN_DIR/tomenotas-hotkey-window"
-    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_LISTAR" binding '<Super>l'
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_LISTAR" binding '<Super>y'
 
     # O atalho de ler chama o daemon via D-Bus — como os demais, só
     # funciona enquanto o tomenotas-daemon estiver rodando.
@@ -230,9 +235,11 @@ echo "==================================================="
 echo " Instalação concluída!"
 echo " Scripts em: $BIN_DIR"
 echo " Notas em:   $NOTES_DIR"
-echo " Atalhos:    Super+R (gravar), Super+L (listar), Super+T (ler)"
+echo " Atalhos:    Super+R (gravar), Super+Y (listar), Super+T (ler)"
 echo ""
 echo " Inicie o daemon com: $BIN_DIR/tomenotas-daemon &"
+echo " No primeiro uso, o app abre as Configurações para baixar o"
+echo " modelo de transcrição e a voz (não são baixados na instalação)."
 echo " O atalho Super+R só funciona enquanto o daemon estiver rodando"
 echo " (feche pelo menu da bandeja para desativá-lo)."
 echo "==================================================="

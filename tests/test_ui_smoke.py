@@ -30,22 +30,28 @@ pytestmark = pytest.mark.skipif(
 
 @pytest.fixture
 def window(tmp_path):
+    from tomenotas.infra.downloads import Downloader, ModelManager
     from tomenotas.infra.notes_db import SqliteNoteStore
     from tomenotas.infra.notify import Notifier
     from tomenotas.infra.player import Player
     from tomenotas.infra.shortcuts import ShortcutManager
+    from tomenotas.infra.transcriber import Transcriber
     from tomenotas.infra.voices import VoiceManager
     from tomenotas.ui.window import NotesWindow
 
     store = SqliteNoteStore(tmp_path / "notes.db", tmp_path / "notes")
     store.save("nota de teste para o detalhe")
     player = Player(Path("/x/piper"), Path("/x/voz.onnx"), tmp_path / "t.wav")
+    transcriber = Transcriber(Path("/x/whisper"), Path("/x/ggml-medium.bin"))
     window = NotesWindow(
         store,
         player,
         Notifier(spawn=lambda cmd, **kw: None),  # no real notifications
-        ShortcutManager(Path.home() / "bin"),
+        ShortcutManager(Path.home() / "tomenotas"),
         VoiceManager(player, Path("/x/voz.onnx"),
+                     config_path=tmp_path / "config.json"),
+        ModelManager(transcriber, Path("/x/ggml-medium.bin"),
+                     tmp_path / "models", Downloader(),
                      config_path=tmp_path / "config.json"),
     )
     window.refresh()

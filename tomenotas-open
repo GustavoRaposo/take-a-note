@@ -14,7 +14,9 @@ vivo() {
 }
 
 if ! vivo; then
-    setsid "$HOME/bin/tomenotas-daemon" > /dev/null 2>&1 &
+    # o daemon mora na mesma pasta que este script (~/tomenotas)
+    AQUI="$(dirname "$(readlink -f "$0")")"
+    setsid "$AQUI/tomenotas-daemon" > /dev/null 2>&1 &
     # espera o daemon registrar o nome D-Bus (até ~5s)
     for _ in $(seq 1 20); do
         sleep 0.25

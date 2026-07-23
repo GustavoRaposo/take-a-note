@@ -22,6 +22,14 @@ class Transcriber:
         self._language = language
         self._run = run
 
+    def is_ready(self) -> bool:
+        """False until the model file exists (downloaded on first run)."""
+        return self._whisper_model.exists()
+
+    def set_model(self, whisper_model: Path) -> None:
+        """Switches the model; takes effect on the next transcribe()."""
+        self._whisper_model = whisper_model
+
     def transcribe(self, wav_path: Path) -> str:
         """Transcribes the .wav and returns the text. Raises
         TranscriptionError (with a user-ready message) on any failure."""
