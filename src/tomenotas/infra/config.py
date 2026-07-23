@@ -44,6 +44,9 @@ class Config:
     alarm_sound: Path | None = None  # None → freedesktop default below
     # keyboard-shortcut backend: "auto" | "gsettings" | "portal"
     shortcut_backend: str = "auto"
+    # live transcription (whisper-stream): opt-in preview during recording
+    stream_enabled: bool = False
+    stream_model: str = "base"  # tiny/base — must keep up in real time
 
     def __post_init__(self):
         if self.whisper_bin is None:
@@ -108,6 +111,15 @@ class Config:
     def db_path(self) -> Path:
         return self.base_dir / "notes.db"
 
+    @property
+    def whisper_stream_bin(self) -> Path:
+        # the live-transcription binary sits next to whisper-cli
+        return self.whisper_bin.parent / "whisper-stream"
+
+    @property
+    def stream_model_path(self) -> Path:
+        return self.models_dir / f"ggml-{self.stream_model}.bin"
+
     @classmethod
     def load(cls, path: Path | None = None) -> "Config":
         """Loads the config from json (if present), with env var overrides.
@@ -158,6 +170,9 @@ class Config:
                 or data.get("shortcut_backend"),
                 ("auto", "gsettings", "portal"), "auto",
             ),
+            stream_enabled=bool(data.get("stream_enabled", False)),
+            stream_model=_one_of(data.get("stream_model"),
+                                 ("tiny", "base"), "base"),
         )
 
 

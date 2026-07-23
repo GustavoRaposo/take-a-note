@@ -47,7 +47,11 @@ clients that die silently when it isn't running:
     telling the glue what to do next (critical=True → note born
     critical; meeting=True → records via the injected meeting recorder;
     the mode is set by the hotkey that STARTS the recording, and the
-    active recorder is used for stop/finish/shutdown);
+    active recorder is used for stop/finish/shutdown). When
+    `stream_enabled`, a mic recording (Super+R/Super+I, not meeting) also
+    starts the injected `stream` transcriber in parallel and fires
+    `on_stream_text` for the live-preview window — preview only, the saved
+    note still comes from the normal transcription on stop;
     `read_current_critical()` reads the latest active critical aloud.
     Observer hooks (both may fire from the transcription thread — glue
     wraps in `GLib.idle_add`): `on_state_change` (tray icon) and
@@ -60,6 +64,10 @@ clients that die silently when it isn't running:
     one-shot timer is injected (`schedule`/`cancel`; glue passes
     GLib.timeout_add_seconds/source_remove), keeping it fully testable.
   - **`infra/`** — injectable I/O adapters: `recorder.py` (arecord),
+    `stream_transcriber.py` (`StreamTranscriber` — live preview via
+    whisper-stream: `StreamOutputParser` turns its stdout into growing
+    text — `\n` commits a line, `\r`/ANSI-clear overwrites the current
+    one; preview only, never touches the saved note; needs SDL2 + a mic),
     `meeting_recorder.py` (`MeetingRecorder` — meeting mode Super+[:
     mixes microphone + computer audio into a null sink via pactl
     loopbacks and records the mix with `pw-record`; same duck-typed
@@ -107,7 +115,9 @@ clients that die silently when it isn't running:
     startup aborts the daemon with a notification, leaving the db
     untouched.
   - **`ui/`** — the glue layer (`daemon.py`, `window.py`,
-    `settings_page.py`, `portal_backend.py` — GlobalShortcuts portal
+    `settings_page.py`, `live_window.py` — the live-transcription preview
+    window (opens on record-start when streaming, grows via
+    `on_stream_text`, hides on stop), `portal_backend.py` — GlobalShortcuts portal
     D-Bus session/signal wiring for KDE, selected by `choose_backend`;
     on GNOME the default is gsettings and this path is unused. Settings'
     Atalhos section is capture-in-app on gsettings, read-only on portal): GTK main loop, `AyatanaAppIndicator3` tray with

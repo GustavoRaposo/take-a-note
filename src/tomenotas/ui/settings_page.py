@@ -32,7 +32,7 @@ class SettingsPage(Gtk.Box):
     this page is visible."""
 
     def __init__(self, manager, voices, models, store, config, alarm,
-                 sound, notifier, window, backend="gsettings"):
+                 sound, notifier, window, backend="gsettings", core=None):
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=8,
                          margin=16)
         self._manager = manager
@@ -41,8 +41,10 @@ class SettingsPage(Gtk.Box):
         self._store = store
         self._alarm = alarm
         self._sound = sound
+        self._core = core  # live daemon core (to toggle streaming at runtime)
         self._notifier = notifier
         self._window = window  # parent of the conflict dialogs
+        self._updating_stream_switch = False
         # "gsettings" → capture keys in-app; "portal" → the system owns
         # the key assignment, so we only show the shortcuts read-only
         self._backend = backend
@@ -165,6 +167,46 @@ class SettingsPage(Gtk.Box):
         model_hint.set_line_wrap(True)
         model_hint.set_xalign(0)
         self.pack_start(model_hint, False, False, 0)
+
+        # ---------------- Section: Transcrição ao vivo ----------------
+
+        self.pack_start(self._section_label("Transcrição ao vivo"),
+                        False, False, 8)
+
+        stream_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
+                             spacing=12)
+        stream_row.pack_start(
+            Gtk.Label(label="Prévia enquanto você fala", xalign=0),
+            False, False, 0)
+        self._stream_switch = Gtk.Switch(active=config.stream_enabled)
+        self._stream_switch.set_valign(Gtk.Align.CENTER)
+        self._stream_switch.connect("notify::active", self._on_stream_toggle)
+        stream_row.pack_start(self._stream_switch, False, False, 0)
+        self._stream_model_combo = Gtk.ComboBoxText()
+        self._stream_model_combo.set_hexpand(True)
+        for size, label in [("base", "base (recomendado)"),
+                            ("tiny", "tiny (mais rápido)")]:
+            self._stream_model_combo.append(size, label)
+        self._stream_model_combo.set_active_id(config.stream_model)
+        self._stream_model_combo.connect("changed",
+                                         self._on_stream_model_changed)
+        stream_row.pack_start(self._stream_model_combo, True, True, 0)
+        self.pack_start(stream_row, False, False, 0)
+
+        self._stream_progress = Gtk.ProgressBar(show_text=True)
+        self._stream_progress.set_no_show_all(True)
+        self.pack_start(self._stream_progress, False, False, 0)
+
+        stream_hint = Gtk.Label(
+            label="Abre uma janela com o texto sendo transcrito enquanto "
+                  "você grava (Super+R / Super+I). Usa um modelo pequeno "
+                  "só para a prévia — a nota final continua vindo do "
+                  "modelo de transcrição. Não vale no modo reunião."
+        )
+        stream_hint.get_style_context().add_class("dim-label")
+        stream_hint.set_line_wrap(True)
+        stream_hint.set_xalign(0)
+        self.pack_start(stream_hint, False, False, 0)
 
         # ---------------- Section: Notas críticas ----------------
 
@@ -377,6 +419,67 @@ class SettingsPage(Gtk.Box):
             GLib.idle_add(self._on_download_done, self._model_progress,
                           self._model_button, "Modelo baixado",
                           f"Modelo {size} baixado e ativado.")
+
+    # ---------------- Live transcription (streaming) ----------------
+
+    def _on_stream_toggle(self, switch, _pspec):
+        if self._updating_stream_switch:
+            return
+        enabled = switch.get_active()
+        if enabled:
+            size = self._stream_model_combo.get_active_id() or "base"
+            if not self._models.is_installed(size):
+                # need the small model first — download, then enable
+                switch.set_sensitive(False)
+                self._stream_progress.show()
+                threading.Thread(target=self._stream_download_worker,
+                                 args=(size,), daemon=True).start()
+                return
+        self._apply_stream_enabled(enabled)
+
+    def _apply_stream_enabled(self, enabled):
+        update_config_file("stream_enabled", enabled)
+        if self._core is not None:
+            self._core.stream_enabled = enabled
+        self._notifier.send(
+            "Transcrição ao vivo",
+            "Ativada — o texto aparece numa janela ao gravar."
+            if enabled else "Desativada.",
+        )
+
+    def _on_stream_model_changed(self, combo):
+        size = combo.get_active_id()
+        if not size:
+            return
+        update_config_file("stream_model", size)
+        if self._core is not None and getattr(self._core, "_stream", None):
+            # the model file changed — point the stream transcriber at it
+            self._core._stream._model = self._models.model_path(size)
+
+    def _stream_download_worker(self, size):
+        try:
+            self._models.download(
+                size, on_progress=self._progress_cb(self._stream_progress),
+                activate=False,  # must not replace the main model
+            )
+        except DownloadError as error:
+            GLib.idle_add(self._on_stream_download_done, False, str(error))
+        else:
+            GLib.idle_add(self._on_stream_download_done, True, size)
+
+    def _on_stream_download_done(self, ok, detail):
+        self._stream_progress.hide()
+        self._stream_progress.set_fraction(0)
+        self._stream_switch.set_sensitive(True)
+        if ok:
+            self._apply_stream_enabled(True)
+        else:
+            # download failed → leave the switch off without notifying twice
+            self._updating_stream_switch = True
+            self._stream_switch.set_active(False)
+            self._updating_stream_switch = False
+            self._notifier.send("Erro", detail)
+        return False
 
     # ---------------- Critical notes (alarm) ----------------
 

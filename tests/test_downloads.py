@@ -185,6 +185,19 @@ def test_download_applies_to_transcriber_and_persists(tmp_path):
     assert cfg.whisper_model == path
 
 
+def test_download_without_activate_only_fetches(tmp_path):
+    # the stream model is downloaded without becoming the active main model
+    manager, transcriber = make_manager(
+        tmp_path, responses={WHISPER_MODELS["base"]["url"]: b"ggml-base"}
+    )
+    path = manager.download("base", activate=False)
+
+    assert path.read_bytes() == b"ggml-base"
+    assert transcriber.models == []          # main model untouched
+    assert manager.current_size() == "medium"
+    assert not (tmp_path / "config" / "config.json").exists()
+
+
 def test_download_failure_changes_nothing(tmp_path):
     manager, transcriber = make_manager(
         tmp_path, responses={WHISPER_MODELS["tiny"]["url"]: OSError("rede")}
