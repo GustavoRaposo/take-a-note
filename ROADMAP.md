@@ -143,8 +143,8 @@ na bandeja, sem abrir a janela.
       `ShowSettings`, `ToggleRecording`, `Ping`). A separação
       núcleo/cola atual (núcleo 100% testado, cola fina) torna essa troca
       de "casca" barata — o núcleo não muda.
-- [ ] Migrar armazenamento de notas para SQLite (permite busca melhor, tags,
-      favoritos)
+- [ ] Migrar armazenamento de notas para SQLite (busca full-text, tags,
+      favoritos) — ver detalhamento na seção abaixo
 - [ ] Exportar notas (Markdown, texto simples, ou até áudio re-sintetizado)
 - [ ] Atalho para editar o texto da nota manualmente antes de "arquivar"
 - [ ] Suporte a múltiplas vozes Piper (trocar pela UI)
@@ -152,6 +152,75 @@ na bandeja, sem abrir a janela.
       ao `gsettings custom-keybindings` (ver riscos abaixo)
 - [ ] Empacotar como `.deb` de verdade (hoje a distribuição é via
       install.sh + venv)
+
+## Detalhamento — SQLite, filtros, tags e favoritos (proposta v3)
+
+### Por que sair dos .txt
+
+Hoje cada nota é um arquivo `.txt` e a busca é substring em memória
+(`Note.matches`). Funciona para dezenas de notas, mas não escala nem
+comporta metadados: não há como marcar favoritos, agrupar por assunto, nem
+buscar com ranking. SQLite resolve tudo isso num único arquivo local
+(`~/.local/share/tomenotas/notes.db`), continua 100% offline e vem na
+biblioteca padrão do Python (`sqlite3`) — zero dependências novas.
+
+### Esquema proposto
+
+```sql
+CREATE TABLE notes (
+    id         INTEGER PRIMARY KEY,
+    created_at TEXT    NOT NULL,             -- ISO-8601
+    text       TEXT    NOT NULL,
+    favorite   INTEGER NOT NULL DEFAULT 0    -- 0/1
+);
+
+CREATE TABLE tags (
+    id   INTEGER PRIMARY KEY,
+    name TEXT UNIQUE COLLATE NOCASE          -- "compras" == "Compras"
+);
+
+CREATE TABLE note_tags (
+    note_id INTEGER REFERENCES notes(id) ON DELETE CASCADE,
+    tag_id  INTEGER REFERENCES tags(id)  ON DELETE CASCADE,
+    PRIMARY KEY (note_id, tag_id)
+);
+
+-- Busca full-text (FTS5), sincronizada com notes via triggers
+CREATE VIRTUAL TABLE notes_fts USING fts5(
+    text, content='notes', content_rowid='id'
+);
+```
+
+### Filtros na UI (combináveis entre si)
+
+- **Texto**: busca full-text via FTS5 com prefixo (`palavra*`) e ranking
+  `bm25` — substitui o substring atual e ordena por relevância.
+- **Tags**: chips clicáveis acima da lista (clicar filtra; múltiplas tags =
+  interseção). Adicionar/remover tag por nota com entry + autocomplete das
+  tags existentes.
+- **Favoritos**: estrela (toggle) em cada linha da lista; chip "★ Favoritos"
+  filtra só marcadas.
+- **Período**: filtro rápido por `created_at` (hoje / esta semana / este
+  mês).
+
+### Arquitetura e migração
+
+- Novo módulo `notes_db.py` no núcleo, com o mesmo contrato do `NoteStore`
+  atual (`save/list/delete/matches`) mais `set_favorite`, `add_tag`,
+  `remove_tag`, `search(texto, tags, favoritos, periodo)` — tudo TDD com
+  banco em memória (`:memory:`), mantendo o gate de 90%.
+- **Migração automática na primeira execução**: importa os `.txt` de
+  `notes/` (timestamp do nome → `created_at`), move os originais para
+  `notes/backup-pre-sqlite/` em vez de apagar (sem perda).
+- O banco vira a fonte da verdade. Os scripts legados (`listar.sh`,
+  `ler.sh`) leem `.txt` — decidir na v3: aposentá-los de vez ou gerar um
+  espelho `.txt` somente-leitura para compatibilidade.
+
+### Critério de pronto
+
+Buscar por texto retorna resultados rankeados; tags e favoritos criados na
+UI persistem e filtram a lista; migração importa todas as notas existentes
+sem perda; combinação de filtros (texto + tag + favorito) funciona.
 
 ## Riscos e pontos em aberto
 
