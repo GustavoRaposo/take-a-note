@@ -1,4 +1,4 @@
-# Voz Notas
+# Tomenotas
 
 Assistente pessoal simples para Ubuntu: grave notas de voz com um atalho de
 teclado, transcreva automaticamente para texto (offline, sem IA/LLM) e ouça
@@ -84,7 +84,7 @@ Se algum atalho já estiver em uso por outro programa, ajuste em
 ~/bin/gravar.sh
 ~/bin/listar.sh
 ~/bin/ler.sh
-~/.local/share/voz-notas/
+~/.local/share/tomenotas/
 ├── notes/              # suas notas de texto (.txt)
 ├── current_note        # ponteiro para a nota selecionada em listar.sh
 └── recording.pid        # existe só enquanto uma gravação está em andamento
@@ -99,13 +99,13 @@ transcrição. As notas de texto **não** são apagadas sozinhas.
 
 ```bash
 # apagar uma nota específica
-rm ~/.local/share/voz-notas/notes/2026-07-22_15-00-38.txt
+rm ~/.local/share/tomenotas/notes/2026-07-22_15-00-38.txt
 
 # apagar todas as notas
-rm ~/.local/share/voz-notas/notes/*.txt
+rm ~/.local/share/tomenotas/notes/*.txt
 
 # apagar notas com mais de 30 dias
-find ~/.local/share/voz-notas/notes/ -name "*.txt" -mtime +30 -delete
+find ~/.local/share/tomenotas/notes/ -name "*.txt" -mtime +30 -delete
 ```
 
 ## Desinstalação

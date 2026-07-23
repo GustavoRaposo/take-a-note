@@ -31,7 +31,7 @@ done
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_DIR="$HOME/bin"
-DATA_DIR="$HOME/.local/share/voz-notas"
+DATA_DIR="$HOME/.local/share/tomenotas"
 NOTES_DIR="$DATA_DIR/notes"
 WHISPER_DIR="$HOME/whisper.cpp"
 PIPER_DIR="$HOME/piper"
@@ -121,9 +121,9 @@ if [ "$SKIP_SHORTCUTS" -eq 0 ]; then
     echo "    Ler nota     : Super+T"
 
     BASE_PATH="/org/gnome/settings-daemon/plugins/media-keys"
-    KEY_GRAVAR="$BASE_PATH/custom-keybindings/voznotas-gravar/"
-    KEY_LISTAR="$BASE_PATH/custom-keybindings/voznotas-listar/"
-    KEY_LER="$BASE_PATH/custom-keybindings/voznotas-ler/"
+    KEY_GRAVAR="$BASE_PATH/custom-keybindings/tomenotas-gravar/"
+    KEY_LISTAR="$BASE_PATH/custom-keybindings/tomenotas-listar/"
+    KEY_LER="$BASE_PATH/custom-keybindings/tomenotas-ler/"
 
     EXISTING=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings)
     if [[ "$EXISTING" == "@as []" ]]; then
@@ -136,15 +136,15 @@ if [ "$SKIP_SHORTCUTS" -eq 0 ]; then
     fi
     gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "$NEW_LIST"
 
-    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_GRAVAR" name 'Voz Notas - Gravar'
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_GRAVAR" name 'Tomenotas - Gravar'
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_GRAVAR" command "$BIN_DIR/gravar.sh"
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_GRAVAR" binding '<Super>r'
 
-    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_LISTAR" name 'Voz Notas - Listar'
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_LISTAR" name 'Tomenotas - Listar'
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_LISTAR" command "$BIN_DIR/listar.sh"
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_LISTAR" binding '<Super>l'
 
-    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_LER" name 'Voz Notas - Ler'
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_LER" name 'Tomenotas - Ler'
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_LER" command "$BIN_DIR/ler.sh"
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_LER" binding '<Super>t'
 

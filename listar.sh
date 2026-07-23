@@ -3,7 +3,7 @@
 # Bind 2: mostra a lista de notas (mais recente primeiro) e permite
 # selecionar uma para virar a "nota atual" (usada pelo ler.sh).
 
-BASE_DIR="$HOME/.local/share/voz-notas"
+BASE_DIR="$HOME/.local/share/tomenotas"
 NOTES_DIR="$BASE_DIR/notes"
 CURRENT_NOTE_FILE="$BASE_DIR/current_note"
 

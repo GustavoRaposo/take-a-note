@@ -4,7 +4,7 @@
 # transcrever e salvar como uma nova nota.
 
 # ---- CONFIGURAÇÃO (ajuste os caminhos abaixo) ----
-BASE_DIR="$HOME/.local/share/voz-notas"
+BASE_DIR="$HOME/.local/share/tomenotas"
 NOTES_DIR="$BASE_DIR/notes"
 PID_FILE="$BASE_DIR/recording.pid"
 AUDIO_TMP="$BASE_DIR/tmp_recording.wav"

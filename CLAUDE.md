@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-Voz Notas — a personal voice-notes assistant for Ubuntu/GNOME, currently implemented
+Tomenotas — a personal voice-notes assistant for Ubuntu/GNOME, currently implemented
 as three standalone bash scripts plus an installer/uninstaller. There is no build
 system, package manager, or test suite: this is glue code around system tools and
 GNOME keyboard shortcuts. All comments, `notify-send` messages, and user-facing
@@ -17,7 +17,7 @@ introduce network calls to AI services when extending this project.
 ## Architecture
 
 Three scripts, each bound to a GNOME custom keybinding, communicating only through
-shared files under `~/.local/share/voz-notas/` — there is no daemon or shared process
+shared files under `~/.local/share/tomenotas/` — there is no daemon or shared process
 (this is intentional for v1; see ROADMAP.md for the planned v2 daemon architecture):
 
 - **`gravar.sh`** (Super+R) — toggles recording. First press: starts `arecord` in the
@@ -49,7 +49,7 @@ corresponding `sed` line in `install.sh` to match.
 State/data layout (see README "Onde ficam os arquivos" for the authoritative list):
 ```
 ~/bin/{gravar,listar,ler}.sh
-~/.local/share/voz-notas/
+~/.local/share/tomenotas/
 ├── notes/*.txt        # transcribed notes, one file per recording
 ├── current_note       # path to the note selected in listar.sh
 └── recording.pid       # present only while a recording is in progress
@@ -65,7 +65,7 @@ keyboard-driven flow:
 ./install.sh --skip-whisper --skip-piper   # if whisper.cpp/Piper already installed
 ```
 Then manually trigger Super+R (record/stop), Super+L (list), Super+T (read), and
-check `~/.local/share/voz-notas/notes/` and `notify-send` output. When editing a
+check `~/.local/share/tomenotas/notes/` and `notify-send` output. When editing a
 single script without reinstalling, run it directly from `~/bin/` (the installed,
 path-patched copy), not from this repo checkout, since the checkout copies have
 placeholder paths.
@@ -73,7 +73,7 @@ placeholder paths.
 ## Roadmap context
 
 See `ROADMAP.md` for the planned v2 rewrite: a long-running Python daemon with a
-GTK/AyatanaAppIndicator3 tray icon, D-Bus IPC (`com.voznotas.Daemon`) so keyboard
+GTK/AyatanaAppIndicator3 tray icon, D-Bus IPC (`com.tomenotas.Daemon`) so keyboard
 shortcuts only work while the app is running, and a GTK UI for managing notes. The
 current bash scripts are Fase 0 (done) in that plan — don't assume the daemon/D-Bus
 pieces exist yet.

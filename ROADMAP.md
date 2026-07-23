@@ -1,4 +1,4 @@
-# Roadmap — Voz Notas (v2: aplicação profissional)
+# Roadmap — Tomenotas (v2: aplicação profissional)
 
 Este documento descreve a evolução do projeto atual (3 scripts bash +
 atalhos do GNOME) para uma aplicação de verdade: um processo em background
@@ -34,7 +34,7 @@ A solução é ter **um processo único de longa duração** (o "daemon") que:
 | Linguagem | Python 3 | Bindings maduros para GTK/AppIndicator, fácil reaproveitar a lógica dos scripts atuais |
 | Tray icon | `AyatanaAppIndicator3` (via PyGObject) | É o que Steam, Discord e outros apps usam no Ubuntu/GNOME para ícone na bandeja com menu |
 | UI | GTK3 (PyGObject) | Nativo, leve, integra bem com o AppIndicator |
-| IPC (atalho → app) | D-Bus (serviço próprio, ex: `com.voznotas.Daemon`) | Permite que o atalho "só funcione com o app aberto": se o app não estiver rodando, a chamada D-Bus simplesmente falha e nada acontece |
+| IPC (atalho → app) | D-Bus (serviço próprio, ex: `com.tomenotas.Daemon`) | Permite que o atalho "só funcione com o app aberto": se o app não estiver rodando, a chamada D-Bus simplesmente falha e nada acontece |
 | Atalhos globais | `gsettings custom-keybindings` gerenciados pelo próprio app, apontando para um cliente D-Bus leve | GNOME no Wayland não permite que apps capturem hotkeys globais diretamente (sandbox); esse é o mecanismo confiável disponível hoje. Ver "Riscos" abaixo para uma alternativa futura via portal. |
 | Armazenamento de notas | Mantém arquivos `.txt` (v2) → considerar SQLite na v3 | Simplicidade agora, espaço para evoluir depois |
 | STT / TTS | Mantém whisper.cpp e Piper, chamados via subprocess a partir do daemon | Já validado e funcionando |
@@ -52,15 +52,15 @@ A solução é ter **um processo único de longa duração** (o "daemon") que:
 Objetivo: ter um processo Python rodando em background com ícone na
 bandeja, ainda sem UI de notas.
 
-- [ ] Criar `voznotas-daemon` (processo Python com `GLib.MainLoop`)
+- [ ] Criar `tomenotas-daemon` (processo Python com `GLib.MainLoop`)
 - [ ] Ícone na bandeja via `AyatanaAppIndicator3`, com menu básico:
       "Abrir", "Sair"
-- [ ] Serviço D-Bus próprio (`com.voznotas.Daemon`) com métodos iniciais:
+- [ ] Serviço D-Bus próprio (`com.tomenotas.Daemon`) com métodos iniciais:
   - `ToggleRecording()`
   - `Ping()` (útil para os atalhos saberem se o daemon está vivo)
 - [ ] Migrar a lógica de `gravar.sh` (arecord + whisper.cpp) para dentro do
       daemon, chamado via `ToggleRecording()`
-- [ ] Cliente D-Bus leve (`voznotas-hotkey-record`) para ser o alvo do
+- [ ] Cliente D-Bus leve (`tomenotas-hotkey-record`) para ser o alvo do
       atalho de teclado — só chama o método, não faz mais nada sozinho
 
 **Critério de pronto:** apertar o atalho de gravar só funciona com o
@@ -116,9 +116,9 @@ na bandeja, sem abrir a janela.
 - [ ] Iniciar automaticamente no login (arquivo `.desktop` em
       `~/.config/autostart/`)
 - [ ] Persistir configurações (atalhos, tamanho de modelo, voz escolhida)
-      em `~/.config/voznotas/config.json`
+      em `~/.config/tomenotas/config.json`
 - [ ] Logging estruturado (arquivo de log em
-      `~/.local/share/voznotas/daemon.log`) para facilitar debug
+      `~/.local/share/tomenotas/daemon.log`) para facilitar debug
 - [ ] Tratamento de erros na UI (ex: "microfone não encontrado", "modelo
       whisper não carregado") em vez de falhar silenciosamente
 - [ ] Empacotar como `.deb` (ou pelo menos um instalador único que resolve

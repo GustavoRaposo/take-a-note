@@ -4,7 +4,7 @@
 # Se nenhuma nota foi selecionada via listar.sh, lê a nota mais recente.
 
 # ---- CONFIGURAÇÃO (ajuste os caminhos abaixo) ----
-BASE_DIR="$HOME/.local/share/voz-notas"
+BASE_DIR="$HOME/.local/share/tomenotas"
 NOTES_DIR="$BASE_DIR/notes"
 CURRENT_NOTE_FILE="$BASE_DIR/current_note"
 

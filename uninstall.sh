@@ -22,15 +22,15 @@ for arg in "$@"; do
 done
 
 BIN_DIR="$HOME/bin"
-DATA_DIR="$HOME/.local/share/voz-notas"
+DATA_DIR="$HOME/.local/share/tomenotas"
 WHISPER_DIR="$HOME/whisper.cpp"
 PIPER_DIR="$HOME/piper"
 
 echo "==> Removendo atalhos de teclado do GNOME..."
 BASE_PATH="/org/gnome/settings-daemon/plugins/media-keys"
-KEY_GRAVAR="$BASE_PATH/custom-keybindings/voznotas-gravar/"
-KEY_LISTAR="$BASE_PATH/custom-keybindings/voznotas-listar/"
-KEY_LER="$BASE_PATH/custom-keybindings/voznotas-ler/"
+KEY_GRAVAR="$BASE_PATH/custom-keybindings/tomenotas-gravar/"
+KEY_LISTAR="$BASE_PATH/custom-keybindings/tomenotas-listar/"
+KEY_LER="$BASE_PATH/custom-keybindings/tomenotas-ler/"
 
 EXISTING=$(gsettings get org.gnome.settings-daemon.plugins.media-keys custom-keybindings 2>/dev/null)
 
