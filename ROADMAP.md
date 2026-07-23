@@ -132,6 +132,17 @@ na bandeja, sem abrir a janela.
 
 ## Ideias para depois (backlog, sem compromisso)
 
+- [ ] **Migrar a UI para GTK4 + libadwaita** — visual GNOME moderno de
+      verdade: `Adw.ApplicationWindow`, lista de notas com `Adw.ActionRow`,
+      toasts (ex: "Nota apagada — Desfazer"), `Adw.PreferencesWindow` para
+      a tela de Configurações, dark mode automático. Restrição: o
+      `AyatanaAppIndicator3` só funciona com GTK3 (GTK3 e GTK4 não coexistem
+      no mesmo processo), então a bandeja sai do daemon e vira um
+      **processo satélite mínimo em GTK3** (só ícone + menu), conversando
+      com o daemon pelos métodos D-Bus que já existem (`ShowWindow`,
+      `ShowSettings`, `ToggleRecording`, `Ping`). A separação
+      núcleo/cola atual (núcleo 100% testado, cola fina) torna essa troca
+      de "casca" barata — o núcleo não muda.
 - [ ] Migrar armazenamento de notas para SQLite (permite busca melhor, tags,
       favoritos)
 - [ ] Exportar notas (Markdown, texto simples, ou até áudio re-sintetizado)
