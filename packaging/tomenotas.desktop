@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Tomenotas
+Comment=Assistente de notas de voz (STT/TTS offline)
+Exec=/usr/bin/tomenotas-open
+Icon=/usr/share/tomenotas/icons/tomenotas-idle.svg
+Terminal=false
+Categories=Utility;Audio;
+Keywords=notas;voz;gravar;transcrever;tomenotas;

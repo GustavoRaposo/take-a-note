@@ -6,3 +6,8 @@ __pycache__/
 dist/
 build/
 /ROADMAP.md
+
+# artefatos do build do .deb
+packaging/vendor/
+packaging/staging/
+dist/

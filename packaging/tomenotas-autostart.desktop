@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Tomenotas
+Comment=Assistente de notas de voz (STT/TTS offline)
+Exec=/usr/bin/tomenotas-daemon
+Icon=audio-input-microphone
+Terminal=false
+X-GNOME-Autostart-enabled=true
