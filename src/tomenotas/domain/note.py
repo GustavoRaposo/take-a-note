@@ -5,8 +5,12 @@ from pathlib import Path
 
 
 def preview(texto: str, limite: int = 60) -> str:
-    """Prévia curta usada em notificações e na lista de notas."""
-    return texto[:limite]
+    """Prévia curta usada em notificações e na lista de notas.
+
+    Sempre uma linha só: quebras de linha e espaços repetidos colapsam
+    num espaço simples, para que os itens da lista tenham altura padrão.
+    """
+    return " ".join(texto.split())[:limite]
 
 
 @dataclass(frozen=True)

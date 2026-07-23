@@ -11,6 +11,16 @@ def test_preview_trunca_em_60_caracteres():
     assert preview("curta") == "curta"
 
 
+def test_preview_e_sempre_uma_linha_so():
+    # quebras de linha e espaços repetidos viram um espaço simples —
+    # os itens da lista de notas devem ter altura padrão
+    assert preview("linha um\nlinha dois\n\nlinha três") == (
+        "linha um linha dois linha três"
+    )
+    assert preview("  espaços \t e \n quebras  ") == "espaços e quebras"
+    assert len(preview(("palavra\n" * 30))) == 60
+
+
 def test_periodo_desde_traduz_os_atalhos_da_ui():
     agora = datetime(2026, 7, 23, 14, 30, 45)
     assert periodo_desde("hoje", agora) == "2026-07-23T00:00:00"
