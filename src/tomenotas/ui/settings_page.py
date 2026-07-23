@@ -74,11 +74,21 @@ class SettingsPage(Gtk.Box):
                 self._buttons[action.id] = button
 
         if self._backend == "portal":
+            actions_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL,
+                                  spacing=6)
+            open_btn = Gtk.Button(label="Configurar atalhos no sistema")
+            open_btn.connect("clicked", self._on_open_system_shortcuts)
+            actions_row.pack_start(open_btn, False, False, 0)
+            help_btn = Gtk.Button(label="?")
+            help_btn.set_tooltip_text("Como configurar os atalhos")
+            help_btn.connect("clicked", self._on_shortcuts_help)
+            actions_row.pack_start(help_btn, False, False, 0)
+            self.pack_start(actions_row, False, False, 0)
             hint = Gtk.Label(
                 label="Neste ambiente, os atalhos são gerenciados pelo "
-                      "sistema. Ajuste as teclas nas Configurações de "
-                      "Atalhos Globais do seu desktop (os valores acima "
-                      "são apenas os sugeridos)."
+                      "sistema. Use o botão acima para abrir as "
+                      "Configurações de Atalhos e definir as teclas (os "
+                      "valores acima são apenas os sugeridos)."
             )
         else:
             hint = Gtk.Label(label="Clique num atalho e pressione a nova "
@@ -556,3 +566,55 @@ class SettingsPage(Gtk.Box):
             action_id, button = self._capturing
             self._capturing = None
             button.set_label(self._button_label(action_id))
+
+    # ---------------- Portal mode: system shortcuts ----------------
+
+    def _on_open_system_shortcuts(self, _button):
+        """Opens the desktop's global-shortcuts settings (portal mode —
+        the app cannot set keys itself). Best-effort across KDE versions;
+        if nothing launches, the user still has the "?" instructions."""
+        import shutil
+        import subprocess
+
+        candidates = [
+            ["systemsettings", "kcm_keys"],       # Plasma 6
+            ["systemsettings5", "kcm_keys"],      # Plasma 5
+            ["kcmshell6", "kcm_keys"],
+            ["kcmshell5", "keys"],
+            ["systemsettings"],                   # fallback: just open it
+        ]
+        for cmd in candidates:
+            if shutil.which(cmd[0]):
+                try:
+                    subprocess.Popen(cmd)
+                    return
+                except OSError:
+                    continue
+        self._notifier.send(
+            "Atalhos",
+            "Abra as Configurações do sistema → Atalhos para definir as "
+            "teclas do Tomenotas.",
+        )
+
+    def _on_shortcuts_help(self, _button):
+        dialog = Gtk.MessageDialog(
+            transient_for=self._window,
+            modal=True,
+            message_type=Gtk.MessageType.INFO,
+            buttons=Gtk.ButtonsType.OK,
+            text="Como configurar os atalhos",
+        )
+        dialog.format_secondary_text(
+            "Neste desktop (ex.: KDE), por segurança, só o sistema pode "
+            "definir atalhos globais — o Tomenotas apenas os registra e "
+            "sugere as teclas.\n\n"
+            "1. Clique em \"Configurar atalhos no sistema\" (ou abra as "
+            "Configurações do Sistema → Atalhos).\n"
+            "2. Encontre as ações do Tomenotas (Gravar, Listar, Ler, "
+            "Nota crítica, Ler crítica, Reunião).\n"
+            "3. Clique na ação e defina a combinação de teclas desejada.\n\n"
+            "Os atalhos só funcionam enquanto o Tomenotas estiver aberto "
+            "(fechar pela bandeja os desativa)."
+        )
+        dialog.run()
+        dialog.destroy()
