@@ -3,7 +3,7 @@
 from datetime import datetime
 from pathlib import Path
 
-from tomenotas.notes_db import SqliteNoteStore, periodo_desde
+from tomenotas.infra.notes_db import SqliteNoteStore
 
 RELOGIO = lambda: datetime(2026, 7, 23, 15, 0, 38)  # noqa: E731
 
@@ -325,15 +325,6 @@ def test_busca_por_periodo(tmp_path):
     povoa(store)
     recentes = store.search(desde="2026-07-22T00:00:00")
     assert len(recentes) == 2
-
-
-def test_periodo_desde_traduz_os_atalhos_da_ui():
-    agora = datetime(2026, 7, 23, 14, 30, 45)
-    assert periodo_desde("hoje", agora) == "2026-07-23T00:00:00"
-    assert periodo_desde("7dias", agora) == "2026-07-16T14:30:45"
-    assert periodo_desde("30dias", agora) == "2026-06-23T14:30:45"
-    assert periodo_desde("", agora) is None
-    assert periodo_desde("qualquer-coisa", agora) is None
 
 
 def test_filtros_combinados(tmp_path):

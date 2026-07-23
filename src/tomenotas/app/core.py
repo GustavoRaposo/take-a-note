@@ -1,33 +1,18 @@
-"""Núcleo do daemon: máquina de estados idle → recording → transcribing.
+"""Caso de uso central: máquina de estados idle → recording → transcribing.
 
 Lógica pura e síncrona, sem GTK/D-Bus/threads — tudo de I/O entra por
 injeção (recorder, transcriber, notes, notifier), o que torna o módulo
-100% testável. A camada de cola (daemon.py) decide o que roda em thread.
+100% testável. A camada de cola (ui/daemon.py) decide o que roda em
+thread. Importa apenas domain/ — nunca infra/ ou ui/.
 """
 
 import logging
-from enum import Enum, auto
 
-from .notes import NoteStore
-from .transcriber import TranscriptionError
+from ..domain.errors import TranscriptionError
+from ..domain.note import preview
+from ..domain.state import State, ToggleAction
 
 log = logging.getLogger("tomenotas.core")
-
-
-class State(Enum):
-    IDLE = auto()
-    RECORDING = auto()
-    TRANSCRIBING = auto()
-
-
-class ToggleAction(Enum):
-    """O que o toggle fez — a cola usa isso para decidir o próximo passo
-    (STOP_REQUESTED → rodar finish_recording() numa thread)."""
-
-    STARTED = auto()
-    STOP_REQUESTED = auto()
-    BUSY = auto()
-    FAILED = auto()
 
 
 class DaemonCore:
@@ -37,7 +22,7 @@ class DaemonCore:
         self._notes = notes
         self._notifier = notifier
         self._state = State.IDLE
-        # Observador de mudanças de estado (Fase 4: ícone da bandeja).
+        # Observador de mudanças de estado (ícone da bandeja).
         # Atenção: finish_recording roda em thread — a cola faz GLib.idle_add.
         self.on_state_change = None
 
@@ -93,7 +78,7 @@ class DaemonCore:
         else:
             caminho = self._notes.save(texto)
             log.info("nota criada: %s", caminho)
-            self._notifier.send("Nota criada", NoteStore.preview(texto))
+            self._notifier.send("Nota criada", preview(texto))
         finally:
             self._recorder.audio_tmp.unlink(missing_ok=True)
             self._set_state(State.IDLE)

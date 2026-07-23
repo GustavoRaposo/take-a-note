@@ -18,10 +18,10 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import GLib, Gtk, Pango  # noqa: E402
 
-from .notes import NoteStore  # noqa: E402
-from .notes_db import periodo_desde  # noqa: E402
-from .player import PlayerError  # noqa: E402
-from .settings_window import SettingsPage  # noqa: E402
+from ..domain.errors import PlayerError  # noqa: E402
+from ..domain.note import preview  # noqa: E402
+from ..domain.periodo import periodo_desde  # noqa: E402
+from .settings_page import SettingsPage  # noqa: E402
 
 PERIODOS = [
     ("", "Qualquer data"),
@@ -225,7 +225,7 @@ class NotesWindow(Gtk.Window):
             cabecalho += "   🏷 " + ", ".join(nota.tags)
         titulo = Gtk.Label(label=cabecalho, xalign=0)
         titulo.get_style_context().add_class("dim-label")
-        previa = Gtk.Label(label=NoteStore.preview(nota.text), xalign=0)
+        previa = Gtk.Label(label=preview(nota.text), xalign=0)
         previa.set_ellipsize(Pango.EllipsizeMode.END)
         vbox.pack_start(titulo, False, False, 0)
         vbox.pack_start(previa, False, False, 0)
@@ -523,7 +523,7 @@ class NotesWindow(Gtk.Window):
 
     def _on_apagar(self, _botao, nota):
         if self._confirma(f"Apagar a nota {nota.title}?",
-                          NoteStore.preview(nota.text)):
+                          preview(nota.text)):
             self._store.delete(nota)
             self.refresh()
 

@@ -4,9 +4,7 @@ import signal
 import subprocess
 from pathlib import Path
 
-
-class RecorderError(Exception):
-    pass
+from ..domain.errors import RecorderError
 
 
 class Recorder:

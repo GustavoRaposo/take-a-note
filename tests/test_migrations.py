@@ -5,11 +5,11 @@ from datetime import datetime
 
 import pytest
 
-from tomenotas.migrations import (
+from tomenotas.domain.errors import MigrationError
+from tomenotas.infra.migrations import (
     MIGRATIONS,
     SCHEMA_VERSION,
     Migration,
-    MigrationError,
     apply_migrations,
 )
 

@@ -1,7 +1,6 @@
 """Testes de tomenotas.status — mapeamento estado → ícone/tooltip e pulso."""
 
-from tomenotas.core import State
-from tomenotas.status import Pulsador, icone, pulsa, tooltip
+from tomenotas.domain.state import Pulsador, State, icone, pulsa, tooltip
 
 
 def test_icones_por_estado():

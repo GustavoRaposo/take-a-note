@@ -5,7 +5,8 @@ import subprocess
 
 import pytest
 
-from tomenotas.recorder import Recorder, RecorderError
+from tomenotas.domain.errors import RecorderError
+from tomenotas.infra.recorder import Recorder
 
 
 class ProcessoFalso:

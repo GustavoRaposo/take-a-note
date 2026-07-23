@@ -14,56 +14,15 @@ import logging
 import re
 import sqlite3
 import threading
-from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
+from ..domain.note import DbNote
 from .migrations import apply_migrations
 
 log = logging.getLogger("tomenotas.notes_db")
 
 _STEM_TS = re.compile(r"^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})")
-
-
-def periodo_desde(periodo: str, agora: datetime | None = None) -> str | None:
-    """Traduz os atalhos de período da UI ("hoje", "7dias", "30dias") para
-    o limite inferior ISO usado em search(desde=...); outro valor → None
-    (sem filtro de data)."""
-    agora = agora or datetime.now()
-    if periodo == "hoje":
-        inicio = agora.replace(hour=0, minute=0, second=0, microsecond=0)
-    elif periodo == "7dias":
-        inicio = agora - timedelta(days=7)
-    elif periodo == "30dias":
-        inicio = agora - timedelta(days=30)
-    else:
-        return None
-    return inicio.isoformat(timespec="seconds")
-
-
-@dataclass(frozen=True)
-class DbNote:
-    id: int
-    created_at: str  # ISO-8601
-    text: str
-    favorite: bool
-    tags: tuple
-    filename: str | None
-
-    @property
-    def title(self) -> str:
-        if self.filename:
-            return Path(self.filename).stem
-        return self.created_at.replace("T", " ")
-
-    def matches(self, consulta: str) -> bool:
-        """Filtro rápido em memória (compatível com a janela de notas)."""
-        consulta = consulta.strip().lower()
-        return (consulta in self.text.lower()
-                or consulta in self.title.lower())
-
-    def __str__(self) -> str:
-        return self.title  # logs legíveis ("nota criada: <timestamp>")
 
 
 class SqliteNoteStore:

@@ -3,7 +3,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from tomenotas.shortcuts import BASE_PATH, ShortcutManager
+from tomenotas.infra.shortcuts import BASE_PATH, ShortcutManager
 
 
 class GsettingsFalso:

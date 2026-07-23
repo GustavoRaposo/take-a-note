@@ -8,9 +8,7 @@ para não travar a UI, como faz com a transcrição.
 import subprocess
 from pathlib import Path
 
-
-class PlayerError(Exception):
-    pass
+from ..domain.errors import PlayerError
 
 
 class Player:

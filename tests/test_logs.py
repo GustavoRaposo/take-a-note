@@ -2,7 +2,7 @@
 
 import logging
 
-from tomenotas.logs import setup_logging
+from tomenotas.infra.logs import setup_logging
 
 
 def test_escreve_linha_formatada_no_arquivo(tmp_path):

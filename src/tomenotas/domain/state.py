@@ -1,12 +1,29 @@
-"""Mapeamento estado → ícone/tooltip da bandeja (Fase 4).
+"""Estados do daemon e o mapeamento estado → ícone/tooltip da bandeja.
 
-Os nomes referem-se aos SVGs em assets/icons/ (instalados pelo install.sh
-em ~/.local/share/tomenotas/icons/). AppIndicator não anima ícones, então
-o efeito de "pulsar" é simulado alternando entre a variante forte e a
-apagada a cada tick (GLib.timeout_add na cola).
+Os nomes de ícone referem-se aos SVGs em assets/icons/ (instalados pelo
+install.sh em ~/.local/share/tomenotas/icons/). AppIndicator não anima
+ícones, então o efeito de "pulsar" é simulado alternando entre a variante
+forte e a apagada a cada tick (GLib.timeout_add na cola).
 """
 
-from .core import State
+from enum import Enum, auto
+
+
+class State(Enum):
+    IDLE = auto()
+    RECORDING = auto()
+    TRANSCRIBING = auto()
+
+
+class ToggleAction(Enum):
+    """O que o toggle fez — a cola usa isso para decidir o próximo passo
+    (STOP_REQUESTED → rodar finish_recording() numa thread)."""
+
+    STARTED = auto()
+    STOP_REQUESTED = auto()
+    BUSY = auto()
+    FAILED = auto()
+
 
 # estado -> (ícone principal, variante apagada do pulso ou None, tooltip)
 _INFO = {

@@ -19,18 +19,19 @@ gi.require_version("AyatanaAppIndicator3", "0.1")
 from gi.repository import Gio, GLib, Gtk  # noqa: E402
 from gi.repository import AyatanaAppIndicator3 as AppIndicator  # noqa: E402
 
-from . import status  # noqa: E402
-from . import __version__  # noqa: E402
-from .config import Config  # noqa: E402
-from .core import DaemonCore, State, ToggleAction  # noqa: E402
-from .logs import setup_logging  # noqa: E402
-from .migrations import MigrationError  # noqa: E402
-from .notes_db import SqliteNoteStore  # noqa: E402
-from .notify import Notifier  # noqa: E402
-from .player import Player  # noqa: E402
-from .recorder import Recorder  # noqa: E402
-from .shortcuts import ShortcutManager  # noqa: E402
-from .transcriber import Transcriber  # noqa: E402
+from .. import __version__  # noqa: E402
+from ..app.core import DaemonCore  # noqa: E402
+from ..domain import state as status  # noqa: E402
+from ..domain.errors import MigrationError  # noqa: E402
+from ..domain.state import State, ToggleAction  # noqa: E402
+from ..infra.config import Config  # noqa: E402
+from ..infra.logs import setup_logging  # noqa: E402
+from ..infra.notes_db import SqliteNoteStore  # noqa: E402
+from ..infra.notify import Notifier  # noqa: E402
+from ..infra.player import Player  # noqa: E402
+from ..infra.recorder import Recorder  # noqa: E402
+from ..infra.shortcuts import ShortcutManager  # noqa: E402
+from ..infra.transcriber import Transcriber  # noqa: E402
 from .window import NotesWindow  # noqa: E402
 
 BUS_NAME = "com.tomenotas.Daemon"

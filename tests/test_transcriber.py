@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from tomenotas.transcriber import Transcriber, TranscriptionError
+from tomenotas.domain.errors import TranscriptionError
+from tomenotas.infra.transcriber import Transcriber
 
 
 def monta(tmp_path, run):

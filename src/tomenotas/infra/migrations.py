@@ -17,13 +17,11 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable
 
+from ..domain.errors import MigrationError
+
 log = logging.getLogger("tomenotas.migrations")
 
 BACKUPS_MANTIDOS = 3
-
-
-class MigrationError(Exception):
-    pass
 
 
 @dataclass(frozen=True)

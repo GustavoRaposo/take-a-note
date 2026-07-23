@@ -271,7 +271,7 @@ sem perda; combinação de filtros (texto + tag + favorito) funciona;
 pendentes automaticamente e nenhuma nota/tag/favorito se perde** (validado
 por teste com banco populado de versão antiga).
 
-## Plano — camadas físicas (Clean Architecture leve)
+## Plano — camadas físicas (Clean Architecture leve) (executado)
 
 O pacote hoje é plano (`src/tomenotas/*.py`), mas a separação lógica já
 existe: núcleo puro e testado, I/O injetável, cola GTK fina. Este plano

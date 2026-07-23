@@ -12,7 +12,7 @@ requires-python = ">=3.10"
 dependencies = []
 
 [project.scripts]
-tomenotas-daemon = "tomenotas.daemon:main"
+tomenotas-daemon = "tomenotas.ui.daemon:main"
 
 [project.optional-dependencies]
 dev = [
@@ -28,7 +28,6 @@ testpaths = ["tests"]
 addopts = "--cov=tomenotas --cov-report=term-missing --cov-fail-under=90"
 
 [tool.coverage.run]
-# daemon.py, window.py e settings_window.py são a camada de cola
-# GTK/AppIndicator/D-Bus: mantidas finas e burras (só delegam para o núcleo
-# testado) e validadas manualmente — ver CLAUDE.md.
-omit = ["*/daemon.py", "*/window.py", "*/settings_window.py"]
+# ui/ é a camada de cola GTK/AppIndicator/D-Bus: mantida fina e burra (só
+# delega para o núcleo testado) e validada manualmente — ver CLAUDE.md.
+omit = ["*/ui/*"]

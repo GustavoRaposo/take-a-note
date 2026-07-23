@@ -4,7 +4,8 @@ from pathlib import Path
 
 import pytest
 
-from tomenotas.player import Player, PlayerError
+from tomenotas.domain.errors import PlayerError
+from tomenotas.infra.player import Player
 
 
 class PaplayFalso:

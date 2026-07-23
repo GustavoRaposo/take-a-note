@@ -3,9 +3,10 @@
 from datetime import datetime
 from pathlib import Path
 
-from tomenotas.core import DaemonCore, State, ToggleAction
-from tomenotas.notes import NoteStore
-from tomenotas.transcriber import TranscriptionError
+from tomenotas.app.core import DaemonCore
+from tomenotas.domain.errors import TranscriptionError
+from tomenotas.domain.state import State, ToggleAction
+from tomenotas.infra.notes_db import SqliteNoteStore
 
 
 class RecorderFalso:
@@ -54,8 +55,8 @@ def monta_core(tmp_path, falha_no_start=False, erro_transcricao=None,
     audio_tmp = tmp_path / "tmp_recording.wav"
     recorder = RecorderFalso(audio_tmp, falha_no_start=falha_no_start)
     transcriber = TranscriberFalso(texto=texto, erro=erro_transcricao)
-    notes = NoteStore(tmp_path / "notes",
-                      now=lambda: datetime(2026, 7, 22, 15, 0, 38))
+    notes = SqliteNoteStore(tmp_path / "notes.db", tmp_path / "notes",
+                            now=lambda: datetime(2026, 7, 22, 15, 0, 38))
     notifier = NotifierFalso()
     core = DaemonCore(recorder, transcriber, notes, notifier)
     return core, recorder, transcriber, notes, notifier

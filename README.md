@@ -157,11 +157,12 @@ find ~/.local/share/tomenotas/notes/ -name "*.txt" -mtime +30 -delete
 
 ## Desenvolvimento
 
-O daemon é um pacote Python (`src/tomenotas/`) desenvolvido com TDD: a
-lógica (gravação, transcrição, notas, máquina de estados) é pura e coberta
-por testes, com gate de 90% de cobertura (`pytest` falha abaixo disso). A
-camada de cola GTK/AppIndicator/D-Bus (`daemon.py`) é fina, fica fora da
-métrica e é validada manualmente.
+O daemon é um pacote Python (`src/tomenotas/`) desenvolvido com TDD e
+organizado em camadas (Clean Architecture leve): `domain/` (regras puras),
+`app/` (casos de uso), `infra/` (adaptadores de I/O) e `ui/` (cola
+GTK/D-Bus, fina, fora da métrica de cobertura). O gate de cobertura é 90%
+(`pytest` falha abaixo disso) e a regra de dependência entre camadas é
+imposta por `tests/test_arquitetura.py`.
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate

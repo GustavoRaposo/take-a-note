@@ -3,7 +3,7 @@
 import json
 from pathlib import Path
 
-from tomenotas.config import Config
+from tomenotas.infra.config import Config
 
 
 def test_padroes_derivam_de_base_dir():

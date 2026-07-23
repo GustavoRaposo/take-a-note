@@ -2,7 +2,7 @@
 
 import threading
 
-from tomenotas.notify import Notifier
+from tomenotas.infra.notify import Notifier
 
 
 class ProcFalso:

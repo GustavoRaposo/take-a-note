@@ -4,11 +4,9 @@ import logging
 import subprocess
 from pathlib import Path
 
+from ..domain.errors import TranscriptionError
+
 log = logging.getLogger("tomenotas.transcriber")
-
-
-class TranscriptionError(Exception):
-    pass
 
 
 class Transcriber:

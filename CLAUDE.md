@@ -22,70 +22,63 @@ Recording goes through the daemon (Fase 1 of ROADMAP.md); listing/reading are
 still standalone scripts communicating through shared files under
 `~/.local/share/tomenotas/`:
 
-- **`src/tomenotas/`** — the daemon package, split so all logic is pure and
-  testable, with I/O injected:
-  - `core.py` — the state machine (idle → recording → transcribing), fully
-    synchronous, no GTK/D-Bus/threads. `toggle()` returns a `ToggleAction`
-    telling the glue what to do next.
-  - `recorder.py` / `transcriber.py` / `notes.py` / `notify.py` /
-    `player.py` — thin injectable wrappers around `arecord`, whisper.cpp,
-    note files (list/save/delete/search via `Note.matches`), `notify-send`,
-    and Piper+`paplay` playback. User-facing error messages are raised as
-    `TranscriptionError` / `PlayerError`.
-  - `config.py` — reads `~/.config/tomenotas/config.json` (written by
-    `install.sh`; whisper + piper paths) with `TOMENOTAS_*` env overrides.
-    This replaced the old sed-patching for the daemon.
-  - `shortcuts.py` — GNOME keybindings via the `gsettings` CLI (injectable
-    run): get/set the three tomenotas custom-keybindings (same ids/paths
-    `install.sh` registers) and conflict detection (`list_conflicts`) across
-    wm/shell/mutter/media-keys schemas and other custom entries.
-  - `status.py` — Fase 4 mapping state → tray icon name/tooltip plus the
-    `Pulsador` (alternates strong/dim icon variants; AppIndicator can't
-    animate). Icon SVGs live in `assets/icons/` and are installed to
-    `~/.local/share/tomenotas/icons/`; the glue falls back to system icons
-    (no pulse) if that dir is missing. `DaemonCore.on_state_change` is the
-    observer hook — it may fire from the transcription worker thread, so
-    the glue wraps it in `GLib.idle_add`.
-  - `logs.py` — Fase 5 structured logging: modules log via
-    `logging.getLogger("tomenotas.<mod>")`; `setup_logging()` (called in
-    `daemon.main`) attaches a rotating file handler writing to
-    `~/.local/share/tomenotas/daemon.log` (idempotent per target file).
-  - `notes_db.py` + `migrations.py` — SQLite storage, the source of truth
-    (`~/.local/share/tomenotas/notes.db`): FTS5 search (`search()` with
-    combinable text/tags/favorites/period filters, bm25 ranking), tags and
-    favorites. **Every schema change MUST be a new immutable `Migration`
-    appended to `MIGRATIONS`** (never edit a published one) plus a test
-    that migrates a *populated* older-version db and proves nothing is
-    lost; the version lives in `PRAGMA user_version`, each migration runs
-    in its own transaction, and the db file is backed up
+- **`src/tomenotas/`** — the daemon package, organized in lightweight
+  clean-architecture layers. **Dependency rule (enforced by
+  `tests/test_arquitetura.py` — the suite fails on violations):**
+  `domain` imports nothing internal; `app` may import only `domain`;
+  `infra` may import only `domain`; `ui` may import everything; `gi`
+  (GTK) is only allowed inside `ui/`. New code goes in the innermost
+  layer that can hold it.
+  - **`domain/`** — pure types and rules, zero I/O: `note.py` (`DbNote`,
+    `preview`), `state.py` (`State`, `ToggleAction`, tray icon/tooltip
+    mapping + `Pulsador` — AppIndicator can't animate, so pulse alternates
+    strong/dim variants), `periodo.py` (`periodo_desde` for the UI period
+    filter) and `errors.py` (user-facing exceptions:
+    `TranscriptionError`, `PlayerError`, `RecorderError`,
+    `MigrationError`).
+  - **`app/core.py`** — the use case: `DaemonCore` state machine (idle →
+    recording → transcribing), fully synchronous, no GTK/D-Bus/threads;
+    I/O ports (recorder/transcriber/notes/notifier) are injected.
+    `toggle()` returns a `ToggleAction` telling the glue what to do next;
+    `on_state_change` is the observer hook for the tray icon (may fire
+    from the transcription worker thread — the glue wraps it in
+    `GLib.idle_add`).
+  - **`infra/`** — injectable I/O adapters: `recorder.py` (arecord),
+    `transcriber.py` (whisper.cpp), `player.py` (Piper + paplay),
+    `notify.py` (notify-send, `--app-name=Tomenotas`, click action),
+    `shortcuts.py` (gsettings keybindings + conflict detection),
+    `config.py` (`~/.config/tomenotas/config.json` + `TOMENOTAS_*` env),
+    `logs.py` (rotating `daemon.log`), and `notes_db.py` +
+    `migrations.py` — SQLite storage, the source of truth
+    (`~/.local/share/tomenotas/notes.db`): FTS5 search with combinable
+    filters and bm25 ranking, tags (CRUD incl. rename-merge), favorites.
+    **Every schema change MUST be a new immutable `Migration` appended to
+    `MIGRATIONS`** (never edit a published one) plus a test that migrates
+    a *populated* older-version db and proves nothing is lost; version in
+    `PRAGMA user_version`, one transaction per migration, file backup
     (`notes.db.bak-v<n>-<ts>`, last 3 kept) before upgrading. Each note
-    keeps a `.txt` mirror in `notes/` so the legacy scripts still work,
-    and foreign `.txt` files (e.g. from legacy `gravar.sh`) are imported
-    at startup. A `MigrationError` at startup aborts the daemon with a
-    notification, leaving the db untouched.
-  - `daemon.py` + `window.py` + `settings_window.py` — the **glue layer**:
-    GTK main loop, `AyatanaAppIndicator3` tray with
+    keeps a `.txt` mirror in `notes/` for the legacy scripts, and foreign
+    `.txt` files are imported at startup. A `MigrationError` at startup
+    aborts the daemon with a notification, leaving the db untouched.
+  - **`ui/`** — the glue layer (`daemon.py`, `window.py`,
+    `settings_page.py`): GTK main loop, `AyatanaAppIndicator3` tray with
     "Abrir"/"Configurações"/"Sair", D-Bus name `com.tomenotas.Daemon` at
     `/com/tomenotas/Daemon` with
-    `ToggleRecording()`/`ShowWindow()`/`ShowSettings()`/`Ping()`, threading
-    for slow work (transcription, TTS synthesis), and the single main
-    window with a `Gtk.StackSidebar` of three pages: **Notas** (FTS search
-    via `store.search()` — filters re-query the db, no client-side
-    filter_func; single-select tag dropdown listing db tags, favorite star
-    per row, tag popover, period combo backed by `periodo_desde`,
-    play/pause per note, delete with confirmation), **Tags** (CRUD over
-    `create_tag`/`rename_tag`/`delete_tag`/`tags_com_contagem`, with merge
-    warning on rename collisions) and **Configurações** (`SettingsPage` in
-    settings_window.py, embedded — the window forwards key-press-event to
-    its `handle_key`; ShowSettings/tray menu open the window on that
-    page). Window close hides — the daemon stays in the tray.
-    Deliberately thin and dumb: they only build widgets and delegate to the
-    tested core. All three are **excluded from coverage** (pyproject omit) —
-    keep new behavior out of them and in the core. Recording state lives
-    in-process — no `recording.pid`.
-  Entry point: `tomenotas-daemon = tomenotas.daemon:main` (console script;
-  `install.sh` installs the package into a `--system-site-packages` venv at
-  `~/.local/share/tomenotas/venv` and symlinks `~/bin/tomenotas-daemon`).
+    `ToggleRecording()`/`ShowWindow()`/`ShowSettings()`/`Ping()`,
+    threading for slow work (transcription, TTS synthesis), and the
+    single main window with a `Gtk.StackSidebar` of three pages: Notas
+    (FTS search re-querying the db, tag dropdown, favorite star, tag
+    popover, period combo, play/pause, delete), Tags (CRUD with merge
+    warning) and Configurações (`SettingsPage`, embedded — the window
+    forwards key-press-event to its `handle_key`). Window close hides —
+    the daemon stays in the tray. Deliberately thin and dumb: only builds
+    widgets and delegates to the tested core. The whole layer is
+    **excluded from coverage** (pyproject omit) — keep new behavior out
+    of it. Recording state lives in-process — no `recording.pid`.
+  Entry point: `tomenotas-daemon = tomenotas.ui.daemon:main` (console
+  script; `install.sh` installs the package into a
+  `--system-site-packages` venv at `~/.local/share/tomenotas/venv` and
+  symlinks `~/bin/tomenotas-daemon`).
 - **`tomenotas-hotkey-record`** (Super+R) / **`tomenotas-hotkey-window`**
   (Super+L) — thin bash D-Bus clients, the targets of the record/list
   keybindings. They just call `ToggleRecording()` / `ShowWindow()` via
@@ -143,18 +136,18 @@ State/data layout (see README "Onde ficam os arquivos" for the authoritative lis
 ## Testing changes
 
 **Python (the daemon): TDD is the workflow.** Any change to `src/tomenotas/`
-(except `daemon.py`) starts with a failing test in `tests/`. Run the suite
-with:
+(except `ui/`) starts with a failing test in `tests/`. Run the suite with:
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 pip install -e ".[dev]"
 pytest
 ```
 The coverage gate (`--cov-fail-under=90`, configured in pyproject.toml) makes
-`pytest` fail below 90% on the core; `daemon.py` (GTK/D-Bus glue) is omitted
-from the metric on purpose — do not "fix" coverage by adding mock-heavy tests
-for it, and do not grow logic inside it: put logic in `core.py` (tested) and
-keep the glue delegating.
+`pytest` fail below 90% on the core; the `ui/` layer (GTK/D-Bus glue) is
+omitted from the metric on purpose — do not "fix" coverage by adding
+mock-heavy tests for it, and do not grow logic inside it: put logic in
+`domain`/`app`/`infra` (tested) and keep the glue delegating. The layer
+dependency rule is enforced by `tests/test_arquitetura.py`.
 
 **Bash scripts + the glue layer:** no automated harness. To validate, install
 and exercise the real keyboard-driven flow:
