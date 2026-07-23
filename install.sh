@@ -8,6 +8,7 @@
 #   ./install.sh --skip-whisper      -> não baixa/compila o whisper.cpp
 #   ./install.sh --skip-piper        -> não baixa o Piper
 #   ./install.sh --skip-shortcuts    -> não mexe nos atalhos do GNOME
+#   ./install.sh --skip-apt          -> não roda apt (dependências já instaladas)
 #   ./install.sh --model-size small  -> escolhe o tamanho do modelo whisper
 #                                        (tiny, base, small, medium, large)
 
@@ -17,12 +18,14 @@ MODEL_SIZE="medium"
 SKIP_WHISPER=0
 SKIP_PIPER=0
 SKIP_SHORTCUTS=0
+SKIP_APT=0
 
 for arg in "$@"; do
     case "$arg" in
         --skip-whisper) SKIP_WHISPER=1 ;;
         --skip-piper) SKIP_PIPER=1 ;;
         --skip-shortcuts) SKIP_SHORTCUTS=1 ;;
+        --skip-apt) SKIP_APT=1 ;;
         --model-size=*) MODEL_SIZE="${arg#*=}" ;;
         --model-size) shift ;;
         *) ;;
@@ -36,10 +39,14 @@ NOTES_DIR="$DATA_DIR/notes"
 WHISPER_DIR="$HOME/whisper.cpp"
 PIPER_DIR="$HOME/piper"
 
-echo "==> Instalando dependências do sistema (apt)..."
-sudo apt update
-sudo apt install -y zenity alsa-utils libnotify-bin git cmake build-essential wget unzip curl pulseaudio-utils \
-    python3-venv python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1
+if [ "$SKIP_APT" -eq 0 ]; then
+    echo "==> Instalando dependências do sistema (apt)..."
+    sudo apt update
+    sudo apt install -y zenity alsa-utils libnotify-bin git cmake build-essential wget unzip curl pulseaudio-utils \
+        python3-venv python3-pip python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1
+else
+    echo "==> Pulando apt (--skip-apt). Certifique-se de que as dependências já estão instaladas."
+fi
 
 echo "==> Criando diretórios..."
 mkdir -p "$BIN_DIR" "$NOTES_DIR"
