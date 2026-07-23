@@ -160,6 +160,29 @@ na bandeja, sem abrir a janela.
 - [ ] Suporte a múltiplas vozes Piper (trocar pela UI)
 - [ ] Avaliar `xdg-desktop-portal` GlobalShortcuts como alternativa nativa
       ao `gsettings custom-keybindings` (ver riscos abaixo)
+- [ ] **Renomear o projeto para honey-note** — em tudo que carrega o nome
+      atual:
+  - pacote Python `tomenotas` → `honey_note` (e entry point
+    `honey-note-daemon`), clientes `tomenotas-hotkey-*` →
+    `honey-note-hotkey-*`, `tomenotas-open` → `honey-note-open`
+  - nome D-Bus `com.tomenotas.Daemon` → `com.honeynote.Daemon` (atualizar
+    os 3 clientes e os ids dos atalhos `tomenotas-*` no gsettings)
+  - diretórios de dados/config: `~/.local/share/tomenotas/` →
+    `~/.local/share/honey-note/` e `~/.config/tomenotas/` →
+    `~/.config/honey-note/` — **com migração automática no install.sh**
+    (mover `notes.db`, `notes/`, config e log da instalação antiga, sem
+    perda de dados; mesma garantia das migrations)
+  - arquivos `.desktop` (menu + autostart), ícones
+    (`tomenotas-*.svg` → `honey-note-*.svg`), logger `tomenotas.*`,
+    `--app-name` das notificações, título da janela
+  - documentos: README, ROADMAP, CLAUDE.md (e avaliar renomear o repo
+    `take-a-note` no GitHub)
+- [ ] **Padronizar os `.py` para desenvolvimento em inglês** —
+      identificadores (funções, variáveis, classes), docstrings e
+      comentários passam para inglês, incluindo nomes de testes.
+      **Exceção**: strings visíveis ao usuário (notificações, janela,
+      mensagens de erro exibidas) continuam em português — atualizar a
+      convenção no CLAUDE.md junto (hoje ela pede tudo em PT)
 - [ ] Empacotar como `.deb` de verdade (hoje a distribuição é via
       install.sh + venv)
 - [x] Aposentar o `ler.sh` (último fluxo bash): método D-Bus
