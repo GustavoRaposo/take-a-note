@@ -146,8 +146,9 @@ na bandeja, sem abrir a janela.
 - [x] Migrar armazenamento de notas para SQLite com migrations
       (`notes_db.py` + `migrations.py`; espelho `.txt` mantido para os
       scripts legados) — ver detalhamento na seção abaixo
-- [ ] UI de filtros/tags/favoritos na janela de notas (o armazenamento já
-      expõe `search()`, tags e favoritos — falta só a interface)
+- [x] UI de filtros/tags/favoritos na janela de notas: busca FTS com
+      ranking, chips de tags (interseção), estrela de favorito por nota,
+      popover de tags (marcar/desmarcar/criar) e filtro de período
 - [ ] Exportar notas (Markdown, texto simples, ou até áudio re-sintetizado)
 - [ ] Atalho para editar o texto da nota manualmente antes de "arquivar"
 - [ ] Suporte a múltiplas vozes Piper (trocar pela UI)

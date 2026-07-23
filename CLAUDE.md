@@ -68,11 +68,14 @@ still standalone scripts communicating through shared files under
     "Abrir"/"Configurações"/"Sair", D-Bus name `com.tomenotas.Daemon` at
     `/com/tomenotas/Daemon` with
     `ToggleRecording()`/`ShowWindow()`/`ShowSettings()`/`Ping()`, threading
-    for slow work (transcription, TTS synthesis), the Fase 2 notes window
-    (list with preview, search filter, play/pause per note, delete with
-    confirmation) and the Fase 3 settings window (click a field, press the
-    new key combo → applied to gsettings immediately, with a conflict
-    warning dialog; window close hides — the daemon stays in the tray).
+    for slow work (transcription, TTS synthesis), the notes window (FTS
+    search via `store.search()` — filters re-query the db, no client-side
+    filter_func; tag chips with intersection, favorite star per row, tag
+    popover, period combo backed by `periodo_desde`, play/pause per note,
+    delete with confirmation) and the Fase 3 settings window (click a
+    field, press the new key combo → applied to gsettings immediately,
+    with a conflict warning dialog; window close hides — the daemon stays
+    in the tray).
     Deliberately thin and dumb: they only build widgets and delegate to the
     tested core. All three are **excluded from coverage** (pyproject omit) —
     keep new behavior out of them and in the core. Recording state lives

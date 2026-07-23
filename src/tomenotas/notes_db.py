@@ -15,7 +15,7 @@ import re
 import sqlite3
 import threading
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from .migrations import apply_migrations
@@ -23,6 +23,22 @@ from .migrations import apply_migrations
 log = logging.getLogger("tomenotas.notes_db")
 
 _STEM_TS = re.compile(r"^(\d{4}-\d{2}-\d{2}_\d{2}-\d{2}-\d{2})")
+
+
+def periodo_desde(periodo: str, agora: datetime | None = None) -> str | None:
+    """Traduz os atalhos de período da UI ("hoje", "7dias", "30dias") para
+    o limite inferior ISO usado em search(desde=...); outro valor → None
+    (sem filtro de data)."""
+    agora = agora or datetime.now()
+    if periodo == "hoje":
+        inicio = agora.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif periodo == "7dias":
+        inicio = agora - timedelta(days=7)
+    elif periodo == "30dias":
+        inicio = agora - timedelta(days=30)
+    else:
+        return None
+    return inicio.isoformat(timespec="seconds")
 
 
 @dataclass(frozen=True)
