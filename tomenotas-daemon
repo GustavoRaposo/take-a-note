@@ -1,0 +1,235 @@
+#!/usr/bin/env python3
+# tomenotas-daemon
+# Fase 1 do roadmap: processo único de longa duração com ícone na bandeja
+# (AyatanaAppIndicator3) e serviço D-Bus próprio (com.tomenotas.Daemon).
+#
+# A lógica de gravação/transcrição do antigo gravar.sh (arecord + whisper.cpp)
+# vive aqui dentro agora, acionada pelo método D-Bus ToggleRecording() — que o
+# cliente leve tomenotas-hotkey-record chama a partir do atalho de teclado.
+# Se o daemon não estiver rodando, a chamada D-Bus falha e nada acontece.
+
+import os
+import signal
+import subprocess
+import sys
+import threading
+from datetime import datetime
+
+import gi
+
+gi.require_version("Gtk", "3.0")
+gi.require_version("AyatanaAppIndicator3", "0.1")
+from gi.repository import Gio, GLib, Gtk  # noqa: E402
+from gi.repository import AyatanaAppIndicator3 as AppIndicator  # noqa: E402
+
+# ---- CONFIGURAÇÃO (o install.sh ajusta os caminhos abaixo via sed) ----
+WHISPER_BIN = os.path.expanduser("~/whisper.cpp/build/bin/whisper-cli")
+WHISPER_MODEL = os.path.expanduser("~/whisper.cpp/models/ggml-medium.bin")
+# -----------------------------------------------------------------------
+
+BASE_DIR = os.path.expanduser("~/.local/share/tomenotas")
+NOTES_DIR = os.path.join(BASE_DIR, "notes")
+AUDIO_TMP = os.path.join(BASE_DIR, "tmp_recording.wav")
+
+BUS_NAME = "com.tomenotas.Daemon"
+OBJECT_PATH = "/com/tomenotas/Daemon"
+
+INTROSPECTION_XML = """
+<node>
+  <interface name="com.tomenotas.Daemon">
+    <method name="ToggleRecording"/>
+    <method name="Ping">
+      <arg type="s" name="reply" direction="out"/>
+    </method>
+  </interface>
+</node>
+"""
+
+# Máquina de estados do daemon (Fase 4 vai refletir isso no ícone)
+STATE_IDLE = "idle"
+STATE_RECORDING = "recording"
+STATE_TRANSCRIBING = "transcribing"
+
+
+def notify(title, body):
+    """Notificação de desktop, igual aos scripts bash (notify-send)."""
+    subprocess.Popen(["notify-send", title, body])
+
+
+class TomenotasDaemon:
+    def __init__(self):
+        os.makedirs(NOTES_DIR, exist_ok=True)
+
+        self.state = STATE_IDLE
+        self.arecord_proc = None
+
+        self._setup_indicator()
+        self._setup_dbus()
+
+    # ---------------- Bandeja (AppIndicator) ----------------
+
+    def _setup_indicator(self):
+        self.indicator = AppIndicator.Indicator.new(
+            "tomenotas",
+            "audio-input-microphone-symbolic",
+            AppIndicator.IndicatorCategory.APPLICATION_STATUS,
+        )
+        self.indicator.set_status(AppIndicator.IndicatorStatus.ACTIVE)
+        self.indicator.set_title("Tomenotas")
+
+        menu = Gtk.Menu()
+
+        item_abrir = Gtk.MenuItem(label="Abrir")
+        item_abrir.connect("activate", self.on_abrir)
+        menu.append(item_abrir)
+
+        item_sair = Gtk.MenuItem(label="Sair")
+        item_sair.connect("activate", self.on_sair)
+        menu.append(item_sair)
+
+        menu.show_all()
+        self.indicator.set_menu(menu)
+
+    def on_abrir(self, _item):
+        # Placeholder da Fase 1: abre a pasta de notas no gerenciador de
+        # arquivos. A Fase 2 substitui isso pela janela GTK de notas.
+        subprocess.Popen(["xdg-open", NOTES_DIR])
+
+    def on_sair(self, _item):
+        # Encerra uma gravação pendente sem transcrever e limpa o tmp
+        if self.arecord_proc is not None and self.arecord_proc.poll() is None:
+            self.arecord_proc.send_signal(signal.SIGINT)
+            try:
+                self.arecord_proc.wait(timeout=3)
+            except subprocess.TimeoutExpired:
+                self.arecord_proc.kill()
+        if os.path.exists(AUDIO_TMP):
+            os.remove(AUDIO_TMP)
+        Gtk.main_quit()
+
+    # ---------------- D-Bus (com.tomenotas.Daemon) ----------------
+
+    def _setup_dbus(self):
+        self._node_info = Gio.DBusNodeInfo.new_for_xml(INTROSPECTION_XML)
+        self._owner_id = Gio.bus_own_name(
+            Gio.BusType.SESSION,
+            BUS_NAME,
+            Gio.BusNameOwnerFlags.NONE,
+            self._on_bus_acquired,
+            None,
+            self._on_name_lost,
+        )
+
+    def _on_bus_acquired(self, connection, _name):
+        connection.register_object(
+            OBJECT_PATH,
+            self._node_info.interfaces[0],
+            self._on_method_call,
+            None,
+            None,
+        )
+
+    def _on_name_lost(self, _connection, _name):
+        # Outra instância já é dona do nome (ou perdemos a conexão): não faz
+        # sentido continuar rodando duplicado.
+        print(f"tomenotas-daemon: nome {BUS_NAME} indisponível "
+              "(já existe outra instância rodando?)", file=sys.stderr)
+        Gtk.main_quit()
+
+    def _on_method_call(self, _conn, _sender, _path, _iface, method,
+                        _params, invocation):
+        if method == "ToggleRecording":
+            self.toggle_recording()
+            invocation.return_value(None)
+        elif method == "Ping":
+            invocation.return_value(GLib.Variant("(s)", ("pong",)))
+
+    # ---------------- Gravação / transcrição ----------------
+
+    def toggle_recording(self):
+        if self.state == STATE_IDLE:
+            self._start_recording()
+        elif self.state == STATE_RECORDING:
+            self._stop_recording()
+        else:  # STATE_TRANSCRIBING
+            notify("Gravação", "Aguarde: ainda transcrevendo a nota anterior.")
+
+    def _start_recording(self):
+        try:
+            self.arecord_proc = subprocess.Popen(
+                ["arecord", "-f", "cd", "-t", "wav", AUDIO_TMP]
+            )
+        except FileNotFoundError:
+            notify("Erro", "arecord não encontrado. Instale o pacote alsa-utils.")
+            return
+        self.state = STATE_RECORDING
+        notify("Gravação", "Gravando... aperte o atalho de novo para parar.")
+
+    def _stop_recording(self):
+        self.state = STATE_TRANSCRIBING
+        proc = self.arecord_proc
+        self.arecord_proc = None
+        notify("Gravação", "Transcrevendo...")
+
+        # A transcrição é lenta — roda numa thread para não travar o MainLoop
+        # (o ícone da bandeja e o D-Bus continuam respondendo).
+        threading.Thread(
+            target=self._transcribe_worker, args=(proc,), daemon=True
+        ).start()
+
+    def _transcribe_worker(self, proc):
+        # SIGINT faz o arecord fechar o .wav corretamente antes de sair
+        proc.send_signal(signal.SIGINT)
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+
+        ts = datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+        note_file = os.path.join(NOTES_DIR, f"{ts}.txt")
+        tmp_out = os.path.join(BASE_DIR, "tmp_transcricao")
+
+        try:
+            subprocess.run(
+                [WHISPER_BIN, "-m", WHISPER_MODEL, "-l", "pt",
+                 "-f", AUDIO_TMP, "-nt", "-otxt", "-of", tmp_out],
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                check=False,
+            )
+        except FileNotFoundError:
+            GLib.idle_add(self._on_transcription_done, None,
+                          "Binário do whisper.cpp não encontrado.")
+            return
+
+        if os.path.exists(tmp_out + ".txt"):
+            os.replace(tmp_out + ".txt", note_file)
+            GLib.idle_add(self._on_transcription_done, note_file, None)
+        else:
+            GLib.idle_add(self._on_transcription_done, None,
+                          "Falha ao transcrever o áudio.")
+
+    def _on_transcription_done(self, note_file, error):
+        # De volta na thread principal (via GLib.idle_add)
+        if os.path.exists(AUDIO_TMP):
+            os.remove(AUDIO_TMP)
+        self.state = STATE_IDLE
+
+        if error is not None:
+            notify("Erro", error)
+        else:
+            with open(note_file, encoding="utf-8", errors="replace") as f:
+                preview = f.read(60)
+            notify("Nota criada", preview)
+        return False  # não repetir o idle callback
+
+
+def main():
+    daemon = TomenotasDaemon()
+    # Ctrl+C no terminal encerra limpo (útil ao rodar o daemon na mão)
+    signal.signal(signal.SIGINT, lambda *_: daemon.on_sair(None))
+    Gtk.main()
+
+
+if __name__ == "__main__":
+    main()

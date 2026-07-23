@@ -47,20 +47,20 @@ A solução é ter **um processo único de longa duração** (o "daemon") que:
 - [x] `install.sh` / `uninstall.sh`
 - [x] Atalhos via `gsettings custom-keybindings`
 
-## Fase 1 — Esqueleto do daemon
+## Fase 1 — Esqueleto do daemon (concluído)
 
 Objetivo: ter um processo Python rodando em background com ícone na
 bandeja, ainda sem UI de notas.
 
-- [ ] Criar `tomenotas-daemon` (processo Python com `GLib.MainLoop`)
-- [ ] Ícone na bandeja via `AyatanaAppIndicator3`, com menu básico:
+- [x] Criar `tomenotas-daemon` (processo Python com `GLib.MainLoop`)
+- [x] Ícone na bandeja via `AyatanaAppIndicator3`, com menu básico:
       "Abrir", "Sair"
-- [ ] Serviço D-Bus próprio (`com.tomenotas.Daemon`) com métodos iniciais:
+- [x] Serviço D-Bus próprio (`com.tomenotas.Daemon`) com métodos iniciais:
   - `ToggleRecording()`
   - `Ping()` (útil para os atalhos saberem se o daemon está vivo)
-- [ ] Migrar a lógica de `gravar.sh` (arecord + whisper.cpp) para dentro do
+- [x] Migrar a lógica de `gravar.sh` (arecord + whisper.cpp) para dentro do
       daemon, chamado via `ToggleRecording()`
-- [ ] Cliente D-Bus leve (`tomenotas-hotkey-record`) para ser o alvo do
+- [x] Cliente D-Bus leve (`tomenotas-hotkey-record`) para ser o alvo do
       atalho de teclado — só chama o método, não faz mais nada sozinho
 
 **Critério de pronto:** apertar o atalho de gravar só funciona com o

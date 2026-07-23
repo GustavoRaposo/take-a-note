@@ -30,6 +30,8 @@ salvo.
 | Seleção de notas | `zenity` |
 | Notificações | `notify-send` |
 | Reprodução de áudio | `paplay` (PulseAudio/PipeWire) |
+| Daemon / bandeja | Python 3 + PyGObject (GTK3, `AyatanaAppIndicator3`) |
+| Atalho → daemon | D-Bus (`com.tomenotas.Daemon`, via `gdbus`) |
 
 ## Requisitos
 
@@ -53,9 +55,11 @@ O instalador:
 2. Clona e compila o `whisper.cpp`, baixando o modelo escolhido (padrão:
    `medium`).
 3. Baixa o binário do Piper e a voz `pt_BR-faber-medium`.
-4. Copia os scripts para `~/bin` e ajusta os caminhos automaticamente.
+4. Copia os scripts e o daemon (`tomenotas-daemon` +
+   `tomenotas-hotkey-record`) para `~/bin` e ajusta os caminhos
+   automaticamente.
 5. Configura os atalhos de teclado no GNOME via `gsettings`:
-   - **Super+R** — gravar/parar
+   - **Super+R** — gravar/parar (via daemon: só funciona com ele rodando)
    - **Super+L** — listar notas
    - **Super+T** — ler nota atual
 
@@ -70,8 +74,13 @@ O instalador:
 
 ## Uso
 
+0. Inicie o daemon (ícone de microfone aparece na bandeja):
+   ```bash
+   ~/bin/tomenotas-daemon &
+   ```
 1. **Super+R** → fala → **Super+R** de novo → uma notificação confirma a nota
-   criada.
+   criada. O atalho só funciona enquanto o daemon estiver rodando — feche
+   pelo menu da bandeja ("Sair") para desativá-lo.
 2. **Super+L** → escolhe uma nota na lista.
 3. **Super+T** → ouve a nota selecionada.
 
@@ -84,6 +93,8 @@ Se algum atalho já estiver em uso por outro programa, ajuste em
 ~/bin/gravar.sh
 ~/bin/listar.sh
 ~/bin/ler.sh
+~/bin/tomenotas-daemon          # daemon (bandeja + D-Bus + gravação)
+~/bin/tomenotas-hotkey-record   # cliente D-Bus chamado pelo Super+R
 ~/.local/share/tomenotas/
 ├── notes/              # suas notas de texto (.txt)
 ├── current_note        # ponteiro para a nota selecionada em listar.sh

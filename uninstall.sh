@@ -47,8 +47,12 @@ print(result)
     fi
 fi
 
+echo "==> Encerrando o daemon, se estiver rodando..."
+pkill -f "$BIN_DIR/tomenotas-daemon" 2>/dev/null
+
 echo "==> Removendo scripts de $BIN_DIR..."
-rm -f "$BIN_DIR/gravar.sh" "$BIN_DIR/listar.sh" "$BIN_DIR/ler.sh"
+rm -f "$BIN_DIR/gravar.sh" "$BIN_DIR/listar.sh" "$BIN_DIR/ler.sh" \
+      "$BIN_DIR/tomenotas-daemon" "$BIN_DIR/tomenotas-hotkey-record"
 
 # remove processo de gravação pendente, se houver
 if [ -f "$DATA_DIR/recording.pid" ]; then

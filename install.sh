@@ -38,7 +38,8 @@ PIPER_DIR="$HOME/piper"
 
 echo "==> Instalando dependências do sistema (apt)..."
 sudo apt update
-sudo apt install -y zenity alsa-utils libnotify-bin git cmake build-essential wget unzip curl pulseaudio-utils
+sudo apt install -y zenity alsa-utils libnotify-bin git cmake build-essential wget unzip curl pulseaudio-utils \
+    python3-gi python3-gi-cairo gir1.2-gtk-3.0 gir1.2-ayatanaappindicator3-0.1
 
 echo "==> Criando diretórios..."
 mkdir -p "$BIN_DIR" "$NOTES_DIR"
@@ -47,7 +48,10 @@ echo "==> Copiando scripts para $BIN_DIR..."
 cp "$SCRIPT_DIR/gravar.sh" "$BIN_DIR/gravar.sh"
 cp "$SCRIPT_DIR/listar.sh" "$BIN_DIR/listar.sh"
 cp "$SCRIPT_DIR/ler.sh" "$BIN_DIR/ler.sh"
-chmod +x "$BIN_DIR/gravar.sh" "$BIN_DIR/listar.sh" "$BIN_DIR/ler.sh"
+cp "$SCRIPT_DIR/tomenotas-daemon" "$BIN_DIR/tomenotas-daemon"
+cp "$SCRIPT_DIR/tomenotas-hotkey-record" "$BIN_DIR/tomenotas-hotkey-record"
+chmod +x "$BIN_DIR/gravar.sh" "$BIN_DIR/listar.sh" "$BIN_DIR/ler.sh" \
+    "$BIN_DIR/tomenotas-daemon" "$BIN_DIR/tomenotas-hotkey-record"
 
 if [ "$SKIP_WHISPER" -eq 0 ]; then
     if [ -d "$WHISPER_DIR" ]; then
@@ -77,11 +81,14 @@ if [ "$SKIP_WHISPER" -eq 0 ]; then
         echo "AVISO: não encontrei o binário compilado automaticamente. Verifique $WHISPER_DIR/build/bin/"
     fi
 
-    echo "==> Ajustando caminhos do whisper.cpp em gravar.sh..."
+    echo "==> Ajustando caminhos do whisper.cpp em gravar.sh e tomenotas-daemon..."
     sed -i "s|^WHISPER_BIN=.*|WHISPER_BIN=\"$WHISPER_BIN_PATH\"|" "$BIN_DIR/gravar.sh"
     sed -i "s|^WHISPER_MODEL=.*|WHISPER_MODEL=\"$MODEL_FILE\"|" "$BIN_DIR/gravar.sh"
+    # o daemon é Python, então o formato da atribuição é diferente (VAR = "...")
+    sed -i "s|^WHISPER_BIN = .*|WHISPER_BIN = \"$WHISPER_BIN_PATH\"|" "$BIN_DIR/tomenotas-daemon"
+    sed -i "s|^WHISPER_MODEL = .*|WHISPER_MODEL = \"$MODEL_FILE\"|" "$BIN_DIR/tomenotas-daemon"
 else
-    echo "==> Pulando instalação do whisper.cpp (--skip-whisper). Ajuste WHISPER_BIN e WHISPER_MODEL manualmente em $BIN_DIR/gravar.sh"
+    echo "==> Pulando instalação do whisper.cpp (--skip-whisper). Ajuste WHISPER_BIN e WHISPER_MODEL manualmente em $BIN_DIR/gravar.sh e $BIN_DIR/tomenotas-daemon"
 fi
 
 if [ "$SKIP_PIPER" -eq 0 ]; then
@@ -136,8 +143,10 @@ if [ "$SKIP_SHORTCUTS" -eq 0 ]; then
     fi
     gsettings set org.gnome.settings-daemon.plugins.media-keys custom-keybindings "$NEW_LIST"
 
+    # O atalho de gravar chama o cliente D-Bus leve, não o gravar.sh: assim
+    # ele só funciona enquanto o tomenotas-daemon estiver rodando (Fase 1).
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_GRAVAR" name 'Tomenotas - Gravar'
-    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_GRAVAR" command "$BIN_DIR/gravar.sh"
+    gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_GRAVAR" command "$BIN_DIR/tomenotas-hotkey-record"
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_GRAVAR" binding '<Super>r'
 
     gsettings set org.gnome.settings-daemon.plugins.media-keys.custom-keybinding:"$KEY_LISTAR" name 'Tomenotas - Listar'
@@ -160,4 +169,8 @@ echo " Instalação concluída!"
 echo " Scripts em: $BIN_DIR"
 echo " Notas em:   $NOTES_DIR"
 echo " Atalhos:    Super+R (gravar), Super+L (listar), Super+T (ler)"
+echo ""
+echo " Inicie o daemon com: $BIN_DIR/tomenotas-daemon &"
+echo " O atalho Super+R só funciona enquanto o daemon estiver rodando"
+echo " (feche pelo menu da bandeja para desativá-lo)."
 echo "==================================================="

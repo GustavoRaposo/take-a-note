@@ -1,0 +1,14 @@
+#!/bin/bash
+# tomenotas-hotkey-record
+# Cliente D-Bus leve — alvo do atalho de teclado de gravar (Super+R).
+# Só chama ToggleRecording() no daemon; se o daemon não estiver rodando,
+# a chamada falha em silêncio e nada acontece (comportamento desejado:
+# atalho só funciona com o app aberto).
+
+gdbus call --session \
+    --dest com.tomenotas.Daemon \
+    --object-path /com/tomenotas/Daemon \
+    --method com.tomenotas.Daemon.ToggleRecording \
+    > /dev/null 2>&1
+
+exit 0
