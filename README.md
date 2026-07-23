@@ -27,56 +27,63 @@ salvo.
 
 ## Tecnologias usadas
 
-| Componente | Ferramenta |
-|---|---|
-| Gravação de áudio | `arecord` (ALSA) |
-| Speech-to-Text | [whisper.cpp](https://github.com/ggerganov/whisper.cpp) |
-| Text-to-Speech | [Piper](https://github.com/rhasspy/piper) (voz `pt_BR-faber-medium`) |
-| Notificações | `notify-send` |
-| Reprodução de áudio | `paplay` (PulseAudio/PipeWire) |
-| Daemon / bandeja | Python 3 + PyGObject (GTK3, `AyatanaAppIndicator3`) |
-| Atalho → daemon | D-Bus (`com.tomenotas.Daemon`, via `gdbus`) |
+| Componente | Ferramenta | Versão |
+|---|---|---|
+| Gravação de áudio | `arecord` (ALSA, pacote `alsa-utils`) | a do Ubuntu |
+| Speech-to-Text | [whisper.cpp](https://github.com/ggerganov/whisper.cpp) | **v1.9.1** (pinada; binário estático embutido no .deb) |
+| Modelos de STT | ggml `tiny`/`base`/`small`/`medium`/`large-v3` | baixados pelo app no 1º uso (75 MB–2.9 GB) |
+| Text-to-Speech | [Piper](https://github.com/rhasspy/piper) | **2023.11.14-2** (pinada; embutido no .deb) |
+| Voz padrão | `pt_BR-faber-medium` (~60 MB) | baixada pelo app no 1º uso |
+| Notificações | `notify-send` (pacote `libnotify-bin`) | a do Ubuntu |
+| Reprodução de áudio | `paplay` (pacote `pulseaudio-utils`) | a do Ubuntu |
+| Daemon / bandeja | Python + PyGObject (GTK3, `AyatanaAppIndicator3` 0.1) | **Python ≥ 3.10** |
+| Atalho → daemon | D-Bus (`com.tomenotas.Daemon`, via `gdbus`) | — |
+
+As versões do whisper.cpp e do Piper são **pinadas no build do pacote**
+(`packaging/build-deb.sh`) — todo .deb gerado usa exatamente essas; as
+demais dependências vêm do apt do próprio Ubuntu, declaradas no pacote.
 
 ## Requisitos
 
-- Ubuntu com GNOME (testado em Wayland)
-- ~2-4 GB livres para o modelo whisper `medium` + Piper
+- Ubuntu 24.04+ com GNOME (testado em Wayland)
+- Python ≥ 3.10 (o do Ubuntu 24.04 é 3.12 — resolvido pelo apt)
+- Espaço em disco: ~60 MB do pacote + o modelo whisper que você escolher
+  no primeiro uso (75 MB a 2.9 GB) + ~60 MB da voz
 - Microfone funcional
 
 ## Instalação
 
-Coloque todos os arquivos do projeto na mesma pasta e rode:
+A instalação é via pacote `.deb` — um único caminho, sem compilar nada na
+sua máquina:
 
 ```bash
-chmod +x install.sh
-./install.sh
+sudo apt install ./tomenotas_0.2.0_amd64.deb
 ```
 
-O instalador:
+O `apt` resolve as dependências declaradas no pacote. Na primeira vez que
+você abrir o app (menu de aplicativos → **Tomenotas**):
 
-1. Instala dependências via `apt`: `alsa-utils`, `libnotify-bin`,
-   `pulseaudio-utils`, ferramentas de build.
-2. Clona e compila o `whisper.cpp` (só o binário — o **modelo** é baixado
-   pelo próprio app no primeiro uso, em Configurações).
-3. Baixa o binário do Piper (a **voz** também é baixada pelo app no
-   primeiro uso).
-4. Copia os scripts bash + `tomenotas-hotkey-record` para `~/tomenotas`,
-   instala o daemon como pacote Python num venv
-   (`~/.local/share/tomenotas/venv`) e grava os caminhos do whisper em
-   `~/.config/tomenotas/config.json`.
-5. Configura os atalhos de teclado no GNOME via `gsettings`:
-   - **Super+R** — gravar/parar (via daemon: só funciona com ele rodando)
+1. O daemon **registra sozinho os atalhos de teclado** no GNOME:
+   - **Super+R** — gravar/parar (só funciona com o daemon rodando)
    - **Super+Y** — listar notas
    - **Super+T** — ler nota atual
+2. A janela abre em **Configurações** pedindo o download do **modelo de
+   transcrição** (escolha o tamanho — `medium` recomendado) e da **voz**
+   — com barra de progresso; é a única hora em que algo é baixado.
 
-### Opções do instalador
+### Gerando o pacote
+
+Se você clonou o repositório em vez de baixar um `.deb` pronto:
 
 ```bash
-./install.sh --skip-whisper       # não instala/compila o whisper.cpp
-./install.sh --skip-piper         # não instala o Piper
-./install.sh --skip-shortcuts     # não configura atalhos automaticamente
-./install.sh --skip-apt           # não roda apt (dependências já instaladas)
+./packaging/build-deb.sh    # requer git, cmake, build-essential e wget
+sudo apt install ./dist/tomenotas_0.2.0_amd64.deb
 ```
+
+O script compila um `whisper-cli` estático (whisper.cpp v1.9.1, sem
+otimizações da CPU local — o pacote roda em qualquer amd64), baixa o
+Piper 2023.11.14-2 e embute os dois no pacote. As ferramentas de build
+são necessárias só nessa máquina, nunca na de quem instala o `.deb`.
 
 ## Uso
 
@@ -84,7 +91,7 @@ O instalador:
    **menu de aplicativos** (procure "Tomenotas") — o lançador religa o
    daemon se preciso e abre a janela de notas. Manualmente:
    ```bash
-   ~/tomenotas/tomenotas-daemon &
+   tomenotas-daemon &
    ```
    O ícone reflete o estado: neutro = ocioso, **badge vermelho pulsando** =
    gravando, **badge âmbar pulsando** = transcrevendo.
@@ -116,23 +123,29 @@ Se algum atalho já estiver em uso por outro programa, ajuste em
 
 ## Onde ficam os arquivos
 
+**Do pacote (removidos pelo `apt remove`):**
 ```
-~/tomenotas/tomenotas-daemon          # daemon (link para o venv abaixo)
-~/tomenotas/tomenotas-hotkey-record   # cliente D-Bus chamado pelo Super+R
-~/tomenotas/tomenotas-hotkey-window   # cliente D-Bus chamado pelo Super+Y
-~/tomenotas/tomenotas-hotkey-read     # cliente D-Bus chamado pelo Super+T
-~/tomenotas/tomenotas-open            # lançador: religa o daemon e abre a janela
-~/.local/share/applications/tomenotas.desktop  # entrada no menu de apps
-~/.config/tomenotas/config.json # caminhos do whisper/piper (lidos pelo daemon)
-~/.config/autostart/tomenotas.desktop  # inicia o daemon no login
+/usr/bin/tomenotas-daemon             # daemon
+/usr/bin/tomenotas-hotkey-record      # cliente D-Bus chamado pelo Super+R
+/usr/bin/tomenotas-hotkey-window      # cliente D-Bus chamado pelo Super+Y
+/usr/bin/tomenotas-hotkey-read        # cliente D-Bus chamado pelo Super+T
+/usr/bin/tomenotas-open               # lançador: religa o daemon e abre a janela
+/usr/lib/tomenotas/whisper-cli        # whisper.cpp v1.9.1 (estático)
+/usr/lib/tomenotas/piper/             # Piper 2023.11.14-2 (+ espeak-ng-data)
+/usr/lib/python3/dist-packages/tomenotas/  # o pacote Python
+/usr/share/tomenotas/icons/           # ícones da bandeja (estado)
+/usr/share/applications/tomenotas.desktop  # entrada no menu de apps
+/etc/xdg/autostart/tomenotas-autostart.desktop  # inicia o daemon no login
+```
+
+**Seus dados (nunca tocados pelo pacote):**
+```
+~/.config/tomenotas/config.json  # criado/atualizado pelo app (modelo, voz)
 ~/.local/share/tomenotas/
-├── venv/               # pacote Python do daemon
-├── icons/              # ícones da bandeja (estado)
+├── models/             # modelo whisper + voz Piper (baixados no 1º uso)
 ├── daemon.log          # log do daemon (rotativo)
 ├── notes.db            # banco de notas (fonte da verdade; backups .bak-*)
 └── notes/              # espelho .txt das notas (export em texto puro)
-~/whisper.cpp/           # binário e modelo do whisper.cpp
-~/piper/                 # binário e voz do Piper
 ```
 
 ## Apagar notas e áudios
@@ -154,11 +167,19 @@ find ~/.local/share/tomenotas/notes/ -name "*.txt" -mtime +30 -delete
 ## Desinstalação
 
 ```bash
-./uninstall.sh                        # remove scripts e atalhos, mantém notas e dependências
-./uninstall.sh --purge-notes          # também apaga suas notas
-./uninstall.sh --purge-deps           # também remove whisper.cpp e Piper
-./uninstall.sh --purge-notes --purge-deps   # remove tudo
+sudo apt remove tomenotas
 ```
+
+Suas notas, modelos e configuração **ficam** (o pacote não toca a sua
+home). Para apagá-los também:
+
+```bash
+rm -rf ~/.local/share/tomenotas ~/.config/tomenotas
+```
+
+Os atalhos de teclado registrados no gsettings também permanecem (são
+configuração por usuário); uma reinstalação os reaproveita, e apertar
+os atalhos sem o app instalado não faz nada.
 
 ## Desenvolvimento
 
@@ -175,6 +196,12 @@ pip install -e ".[dev]"
 pytest          # roda a suíte com relatório de cobertura
 ```
 
+Para exercitar o fluxo real de teclado durante o desenvolvimento existe o
+`install.sh` (instala via venv na home: scripts em `~/tomenotas`, daemon
+em `~/.local/share/tomenotas/venv`) e o `uninstall.sh` que o reverte —
+**rota exclusiva de desenvolvimento**: não a use com o `.deb` instalado
+(o install.sh detecta e aborta; remova um antes de instalar o outro).
+
 ## Solução de problemas
 
 **Primeiro passo**: veja o log do daemon —
@@ -182,24 +209,17 @@ pytest          # roda a suíte com relatório de cobertura
 tail -50 ~/.local/share/tomenotas/daemon.log
 ```
 
-**`Rofi on wayland requires support for the layer shell protocol`**
-O GNOME não suporta o protocolo `layer-shell` que o rofi usa no Wayland. O
-projeto já usa `zenity` em vez de `rofi` para evitar esse problema. Se você
-ainda tiver o rofi instalado e não for mais usá-lo:
-```bash
-sudo apt remove --purge rofi
-sudo apt autoremove
-```
-
 **`paplay: comando não encontrado`**
-Falta o pacote com utilitários do PulseAudio/PipeWire:
+Não deve acontecer com o `.deb` (o `pulseaudio-utils` é dependência
+declarada), mas se ocorrer:
 ```bash
 sudo apt install -y pulseaudio-utils
 ```
 
 **Binário do whisper.cpp não encontrado**
-Dependendo da versão, o binário compilado se chama `whisper-cli` ou `main`.
-Verifique em `~/whisper.cpp/build/bin/` e ajuste `whisper_bin` em
+Com o `.deb`, o binário fica em `/usr/lib/tomenotas/whisper-cli` —
+reinstale o pacote se ele sumiu. Na rota de desenvolvimento (install.sh),
+verifique `~/whisper.cpp/build/bin/` e ajuste `whisper_bin` em
 `~/.config/tomenotas/config.json` se necessário.
 
 **Nenhum som sai ao gravar/testar o microfone**

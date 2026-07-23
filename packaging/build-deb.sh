@@ -34,6 +34,9 @@ done
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENDOR="$ROOT/packaging/vendor"
+# Versões pinadas: builds reproduzíveis (nada de master/latest)
+WHISPER_TAG="v1.9.1"
+PIPER_VERSION="2023.11.14-2"
 STAGING="$ROOT/packaging/staging"
 DIST="$ROOT/dist"
 VERSION=$(python3 -c "
@@ -46,13 +49,24 @@ DEB="$DIST/tomenotas_${VERSION}_${ARCH}.deb"
 # ---------------- 1. vendor: whisper-cli (estático) + piper ----------------
 
 if [ "$SKIP_VENDOR" -eq 0 ] || [ ! -f "$VENDOR/whisper-cli" ]; then
-    echo "==> Compilando whisper-cli estático..."
+    echo "==> Compilando whisper-cli estático ($WHISPER_TAG)..."
     WHISPER_SRC="$VENDOR/whisper.cpp-src"
-    if [ ! -d "$WHISPER_SRC" ]; then
-        git clone --depth 1 https://github.com/ggerganov/whisper.cpp "$WHISPER_SRC"
+    # re-clona se o checkout existente não é a tag pinada
+    if [ -d "$WHISPER_SRC" ]; then
+        ATUAL=$(git -C "$WHISPER_SRC" describe --tags --exact-match 2>/dev/null || echo "")
+        if [ "$ATUAL" != "$WHISPER_TAG" ]; then
+            rm -rf "$WHISPER_SRC"
+        fi
     fi
+    if [ ! -d "$WHISPER_SRC" ]; then
+        git clone --depth 1 --branch "$WHISPER_TAG" \
+            https://github.com/ggerganov/whisper.cpp "$WHISPER_SRC"
+    fi
+    # GGML_NATIVE=OFF: sem otimizações da CPU da máquina de build — o
+    # binário precisa rodar em qualquer amd64, não só na nossa
     cmake -B "$WHISPER_SRC/build" -S "$WHISPER_SRC" \
-        -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF > /dev/null
+        -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF \
+        -DGGML_NATIVE=OFF > /dev/null
     cmake --build "$WHISPER_SRC/build" --config Release -j --target whisper-cli > /dev/null
     cp "$WHISPER_SRC/build/bin/whisper-cli" "$VENDOR/whisper-cli"
     # binário não pode depender de libs do build (precisa rodar de /usr/lib)
@@ -63,10 +77,10 @@ if [ "$SKIP_VENDOR" -eq 0 ] || [ ! -f "$VENDOR/whisper-cli" ]; then
 fi
 
 if [ "$SKIP_VENDOR" -eq 0 ] || [ ! -f "$VENDOR/piper/piper" ]; then
-    echo "==> Baixando Piper..."
+    echo "==> Baixando Piper ($PIPER_VERSION)..."
     mkdir -p "$VENDOR"
     wget -q -O "$VENDOR/piper.tar.gz" \
-        "https://github.com/rhasspy/piper/releases/latest/download/piper_linux_x86_64.tar.gz"
+        "https://github.com/rhasspy/piper/releases/download/$PIPER_VERSION/piper_linux_x86_64.tar.gz"
     rm -rf "$VENDOR/piper"
     tar -xzf "$VENDOR/piper.tar.gz" -C "$VENDOR"   # extrai vendor/piper/
     rm -f "$VENDOR/piper.tar.gz"
@@ -124,7 +138,7 @@ Section: sound
 Priority: optional
 Architecture: $ARCH
 Installed-Size: $INSTALLED_SIZE
-Depends: python3, python3-gi, python3-gi-cairo, gir1.2-gtk-3.0, gir1.2-ayatanaappindicator3-0.1, alsa-utils, libnotify-bin, pulseaudio-utils
+Depends: python3 (>= 3.10), python3-gi, python3-gi-cairo, gir1.2-gtk-3.0, gir1.2-ayatanaappindicator3-0.1, alsa-utils, libnotify-bin, pulseaudio-utils, libgomp1, libstdc++6
 Maintainer: Gustavo Raposo <gustavo_f.raposo@hotmail.com>
 Description: Assistente pessoal de notas de voz (STT/TTS offline)
  Grave notas de voz com um atalho global (Super+R), transcritas

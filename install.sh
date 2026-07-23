@@ -33,6 +33,16 @@ for arg in "$@"; do
     esac
 done
 
+# Não misturar rotas de instalação: se o pacote .deb está instalado,
+# este instalador (venv em ~/) conflitaria com ele (dois daemons, dois
+# conjuntos de clientes). Remova um antes de instalar o outro.
+if dpkg -s tomenotas > /dev/null 2>&1; then
+    echo "ERRO: o pacote .deb do tomenotas está instalado." >&2
+    echo "Remova-o antes de usar o install.sh:" >&2
+    echo "    sudo apt remove tomenotas" >&2
+    exit 1
+fi
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 BIN_DIR="$HOME/tomenotas"
 DATA_DIR="$HOME/.local/share/tomenotas"

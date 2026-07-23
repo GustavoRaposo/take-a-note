@@ -112,7 +112,8 @@ clients that die silently when it isn't running:
   `install.sh`). Unlike the hotkey clients, it *does* start the daemon if
   it isn't running (waits for the D-Bus name, up to ~5s) before calling
   `ShowWindow()` — opening the app is an explicit user request.
-- **`install.sh`** — installs apt dependencies (including `python3-gi` and
+- **`install.sh`** — **development-only route** (the user-facing install
+  is the .deb; README documents only that path). Installs apt dependencies (including `python3-gi` and
   `gir1.2-ayatanaappindicator3-0.1` for the daemon), clones/builds whisper.cpp and
   downloads the Piper binary (**models/voices are NOT downloaded here** —
   the app offers them on first run; old installs' models keep working via
