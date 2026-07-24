@@ -56,7 +56,11 @@ def test_load_rejects_unknown_stream_model(tmp_path):
     assert Config.load(config_file).stream_model == "base"
 
 
-def test_wakeword_defaults():
+def test_wakeword_defaults(tmp_path, monkeypatch):
+    from tomenotas.infra import config as config_mod
+
+    # isolate from a .deb-installed system model (would win otherwise)
+    monkeypatch.setattr(config_mod, "SYSTEM_SHARE_DIR", tmp_path / "nada")
     cfg = Config(base_dir=Path("/x/dados"))
     assert cfg.wakeword_enabled is False  # opt-in (privacy)
     assert cfg.wakeword_threshold == 0.5
