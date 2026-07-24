@@ -32,7 +32,11 @@ def load_predict(model_path: Path):
         return None
 
     try:
-        model = Model(wakeword_models=[str(model_path)])
+        # onnx-only runtime: the base melspec/embedding models must also be
+        # ONNX (the default, "tflite", would need a TF Lite runtime we ship
+        # nothing for).
+        model = Model(wakeword_models=[str(model_path)],
+                      inference_framework="onnx")
     except Exception as error:  # bad/incompatible model file
         log.warning("wake word: failed to load model %s: %s",
                     model_path, error)

@@ -67,6 +67,11 @@ pip install -q torchinfo torchmetrics speechbrain audiomentations \
 echo "==> Clonando o openWakeWord (sem deps — já instaladas; evita TF/speex)..."
 [ -d openwakeword ] || git clone --depth 1 https://github.com/dscripka/openwakeword
 pip install -q -e ./openwakeword --no-deps
+# Bug do upstream: o flag --convert_to_tflite é `store_true` com
+# `default="False"` (a STRING "False", que é truthy) → a conversão p/ tflite
+# roda mesmo sem o flag, e quebra porque não instalamos TensorFlow/onnx_tf.
+# O .onnx já foi salvo antes disso; corrigimos o default p/ um False real.
+sed -i 's/default="False"/default=False/' openwakeword/openwakeword/train.py
 
 echo "==> Clonando o piper-sample-generator (fork dscripka, o que o treino usa)..."
 # O train.py faz `from generate_samples import generate_samples` — arquivo
