@@ -47,6 +47,20 @@ echo "==> 1/3 Gerando amostras positivas com o Piper (GPU)... (demorado)"
 $TRAIN --generate_clips
 
 echo "==> 2/3 Augmentation + cálculo de features..."
+# O --augment_clips só recomputa se positive_features_train.npy NÃO existe
+# (checa só esse 1 dos 4 arquivos). Se um run anterior morreu no meio, ele
+# pode ter gravado só esse e, no re-run, pular tudo — deixando o treino sem
+# os _test.npy/negativos. Se o conjunto de 4 estiver incompleto, apagamos os
+# parciais para forçar uma recomputação limpa.
+FEAT_DIR="tomenotas_model/tomenotas"
+missing=0
+for f in positive_features_train positive_features_test \
+         negative_features_train negative_features_test; do
+  [ -f "$FEAT_DIR/$f.npy" ] || missing=1
+done
+if [ "$missing" = 1 ]; then
+  rm -f "$FEAT_DIR"/positive_features_*.npy "$FEAT_DIR"/negative_features_*.npy
+fi
 $TRAIN --augment_clips
 
 echo "==> 3/3 Treinando o classificador e exportando ONNX/TFLite..."
