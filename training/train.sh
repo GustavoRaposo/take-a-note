@@ -19,6 +19,28 @@ if ! python3 -c "import torch, openwakeword" 2>/dev/null; then
   exit 1
 fi
 
+# PyTorch 2.6 mudou o default de torch.load para weights_only=True, o que
+# rejeita os checkpoints de modelo completo que essas ferramentas carregam
+# (piper-sample-generator, deep-phonemizer, speechbrain). Um patch global
+# restaura o comportamento antigo para todo o processo — confiamos nas
+# fontes dos modelos. Aplicado via sitecustomize no PYTHONPATH.
+mkdir -p .torchpatch
+cat > .torchpatch/sitecustomize.py <<'PY'
+try:
+    import functools, torch
+    if not getattr(torch.load, "_ww_patched", False):
+        _orig = torch.load
+        @functools.wraps(_orig)
+        def _load(*args, **kwargs):
+            kwargs.setdefault("weights_only", False)
+            return _orig(*args, **kwargs)
+        _load._ww_patched = True
+        torch.load = _load
+except Exception:
+    pass
+PY
+export PYTHONPATH="$PWD/.torchpatch:$PYTHONPATH"
+
 TRAIN="python3 openwakeword/openwakeword/train.py --training_config tomenotas.yml"
 
 echo "==> 1/3 Gerando amostras positivas com o Piper (GPU)... (demorado)"
