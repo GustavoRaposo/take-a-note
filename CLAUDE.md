@@ -53,6 +53,10 @@ clients that die silently when it isn't running:
     `on_stream_text` for the live-preview window — preview only, the saved
     note still comes from the normal transcription on stop;
     `read_current_critical()` reads the latest active critical aloud.
+    When `wakeword_enabled`, an always-on voice trigger listens only while
+    IDLE (`_sync_wakeword` starts/stops the injected `wakeword` detector on
+    every state change) and, on detection, fires `on_wakeword` — the glue
+    routes it to the same handler as Super+R.
     Observer hooks (both may fire from the transcription thread — glue
     wraps in `GLib.idle_add`): `on_state_change` (tray icon) and
     `on_note_saved` (arms the alarm).
@@ -68,6 +72,13 @@ clients that die silently when it isn't running:
     whisper-stream: `StreamOutputParser` turns its stdout into growing
     text — `\n` commits a line, `\r`/ANSI-clear overwrites the current
     one; preview only, never touches the saved note; needs SDL2 + a mic),
+    `wakeword.py` (`WakeWordDetector` + pure `WakeWordGate` — always-on
+    trigger: captures the mic continuously (16 kHz mono via arecord) and
+    feeds 80 ms frames to an injected `predict(frame_bytes)->float`; the
+    gate turns the score stream into one fire per utterance (threshold +
+    cooldown). The `predict` callable and the ONNX model live in the glue
+    (`ui/wakeword_model.py`) — numpy/onnxruntime/openWakeWord are not
+    imported here, so this stays unit-tested. 100% offline; opt-in),
     `meeting_recorder.py` (`MeetingRecorder` — meeting mode Super+[:
     mixes microphone + computer audio into a null sink via pactl
     loopbacks and records the mix with `pw-record`; same duck-typed
@@ -115,7 +126,10 @@ clients that die silently when it isn't running:
     startup aborts the daemon with a notification, leaving the db
     untouched.
   - **`ui/`** — the glue layer (`daemon.py`, `window.py`,
-    `settings_page.py`, `live_window.py` — the live-transcription preview
+    `settings_page.py`, `wakeword_model.py` — loads the openWakeWord ONNX
+    model (numpy + onnxruntime) and returns the `predict` callable the
+    tested `WakeWordDetector` consumes; degrades to None (wake word simply
+    never starts) if the deps or model are absent, `live_window.py` — the live-transcription preview
     window (opens on record-start when streaming, grows via
     `on_stream_text`, hides on stop), `portal_backend.py` — GlobalShortcuts portal
     D-Bus session/signal wiring for KDE, selected by `choose_backend`;
@@ -181,6 +195,19 @@ clients that die silently when it isn't running:
   `/usr/lib/tomenotas/`, copies the pure-Python package into
   `dist-packages` (no venv), clients into `/usr/bin/`, icons into
   `/usr/share/tomenotas/icons/`, desktop launcher + `/etc/xdg/autostart`.
+  The wake-word runtime is vendored too (apt has no
+  numpy/onnxruntime/openWakeWord): `numpy` + `onnxruntime` +
+  `openwakeword` (`--no-deps`, custom-verifier import stripped so `scipy`
+  isn't pulled) + the base melspec/embedding `.onnx` go into
+  `/usr/lib/tomenotas/pydeps`, which the generated `tomenotas-daemon`
+  entry point prepends to `sys.path`; the trained `tomenotas-ww.onnx`
+  ships to `/usr/share/tomenotas/models/`. **The compiled wheels match
+  the build host's python ABI** — on a target with a different `python3`
+  the imports fail and wake word degrades silently (rest of the app is
+  unaffected). The trained model is a manual GPU artifact (see
+  `training/`): the build reuses `packaging/vendor/tomenotas-ww.onnx`,
+  else copies it from `~/.local/share/tomenotas/models/`, else warns and
+  ships without wake word.
   Per-user setup the package cannot do happens on daemon startup:
   `ShortcutManager.ensure_defaults()` registers missing keybindings
   (never overriding existing ones) and models come from the Fase A
