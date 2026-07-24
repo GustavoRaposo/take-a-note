@@ -49,7 +49,11 @@ source venv/bin/activate
 pip install -q --upgrade pip
 
 echo "==> Instalando PyTorch (CUDA) — pode baixar ~2.5GB..."
-pip install -q torch torchaudio
+# Pinado em <2.6: o torch 2.6+ mudou torch.load (weights_only=True) e o
+# torchaudio novo removeu a leitura nativa de áudio (passou a exigir
+# torchcodec, que não suporta FFmpeg 8). O 2.4.1 tem leitura nativa e o
+# default antigo — é a versão que essas ferramentas esperam.
+pip install -q "torch==2.4.1" "torchaudio==2.4.1"
 
 echo "==> Deps de treino (sem TensorFlow/tflite/speex — não usados p/ ONNX)..."
 # datasets<3: as versões novas (4.x) exigem torchcodec para ler áudio; o
