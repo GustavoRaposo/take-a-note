@@ -186,6 +186,24 @@ def test_explicit_config_wins_over_system_install(tmp_path, monkeypatch):
     assert cfg.whisper_bin == Path("/opt/meu-whisper")
 
 
+def test_wakeword_model_falls_back_to_system_share(tmp_path, monkeypatch):
+    from tomenotas.infra import config as config_mod
+
+    share = tmp_path / "usr" / "share" / "tomenotas"
+    (share / "models").mkdir(parents=True)
+    (share / "models" / "tomenotas-ww.onnx").write_bytes(b"onnx")
+    monkeypatch.setattr(config_mod, "SYSTEM_SHARE_DIR", share)
+
+    # no user-local model -> the .deb-shipped one
+    cfg = Config(base_dir=tmp_path / "dados")
+    assert cfg.wakeword_model_path == share / "models" / "tomenotas-ww.onnx"
+
+    # a user-local model (e.g. a retrain) wins
+    (tmp_path / "dados" / "models").mkdir(parents=True)
+    (tmp_path / "dados" / "models" / "tomenotas-ww.onnx").write_bytes(b"x")
+    assert cfg.wakeword_model_path == tmp_path / "dados" / "models" / "tomenotas-ww.onnx"
+
+
 def test_icons_dir_falls_back_to_system_share(tmp_path, monkeypatch):
     from tomenotas.infra import config as config_mod
 

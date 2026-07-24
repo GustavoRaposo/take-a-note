@@ -125,8 +125,14 @@ class Config:
 
     @property
     def wakeword_model_path(self) -> Path:
-        # the custom "Tomenotas" wake-word ONNX model
-        return self.models_dir / "tomenotas-ww.onnx"
+        # the custom "Tomenotas" wake-word ONNX model; a user-local copy
+        # (e.g. a retrain) wins, else the one shipped by the .deb, else the
+        # local path as the default (nothing there yet).
+        local = self.models_dir / "tomenotas-ww.onnx"
+        if local.is_file():
+            return local
+        system = SYSTEM_SHARE_DIR / "models" / "tomenotas-ww.onnx"
+        return system if system.is_file() else local
 
     @classmethod
     def load(cls, path: Path | None = None) -> "Config":
