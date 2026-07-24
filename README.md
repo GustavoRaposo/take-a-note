@@ -30,6 +30,11 @@ rodando localmente na sua máquina.
   Super+I), abre uma janela mostrando o texto sendo transcrito enquanto
   você fala (prévia com modelo pequeno). A nota final continua vindo do
   modelo de transcrição escolhido.
+- **Palavra de ativação ("Tomenotas")**: ative em Configurações e o app
+  passa a escutar o microfone continuamente; ao ouvir **"Tomenotas"** ele
+  começa a gravar sozinho, sem tocar em nenhum atalho. Opcional (desligado
+  por padrão) e **100% offline** — o reconhecimento roda localmente, nada
+  do áudio sai da máquina.
 
 Cada gravação gera um arquivo `.txt` próprio. O áudio bruto (`.wav`) é
 temporário e apagado automaticamente depois da transcrição — só o texto fica
@@ -69,7 +74,7 @@ sua máquina. Baixe o `.deb` mais recente na
 e instale:
 
 ```bash
-sudo apt install ./tomenotas_1.6.0_amd64.deb
+sudo apt install ./tomenotas_1.7.0_amd64.deb
 ```
 
 O `apt` resolve as dependências declaradas no pacote. (Ele pode exibir
