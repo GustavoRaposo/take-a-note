@@ -10,7 +10,8 @@ onde o daemon procura (`~/.local/share/tomenotas/models/tomenotas-ww.onnx`).
 
 - **GPU NVIDIA** com driver (uma GTX 1650 4GB dá conta — o config já vem
   com batches reduzidos para caber em 4GB).
-- Linux, `git`, `wget`, `ffmpeg`.
+- Linux, `git`, `wget`, `ffmpeg`, e **`espeak-ng`** (o gerador de amostras
+  usa: `sudo apt install espeak-ng`).
 - **~30 GB livres** e **algumas horas** (o gargalo é gerar as amostras e
   baixar os dados negativos, não o treino em si).
 - **Python 3.10–3.12** para o treino. O ecossistema de ML (torch etc.)

@@ -17,6 +17,13 @@ mkdir -p "$WORKDIR"
 cd "$WORKDIR"
 echo "==> Diretório de trabalho: $WORKDIR"
 
+# dep de sistema: o gerador de amostras usa espeak-phonemizer (libespeak-ng)
+if ! ldconfig -p 2>/dev/null | grep -q libespeak-ng; then
+  echo "AVISO: 'espeak-ng' não parece instalado (necessário para gerar as" >&2
+  echo "amostras). Instale com:  sudo apt install espeak-ng" >&2
+  echo "Continuando o setup — mas o train.sh vai falhar sem ele." >&2
+fi
+
 # ---------------- Python 3.11 ----------------
 export PATH="$HOME/.local/bin:$PATH"
 PY=""
@@ -51,18 +58,25 @@ echo "==> Deps de treino (sem TensorFlow/tflite/speex — não usados p/ ONNX)..
 pip install -q torchinfo torchmetrics speechbrain audiomentations \
     torch-audiomentations "datasets<3" soundfile scipy scikit-learn numpy \
     pyyaml tqdm mutagen acoustics onnx onnxruntime requests \
-    piper-phonemize webrtcvad
+    pronouncing espeak-phonemizer webrtcvad
 
 echo "==> Clonando o openWakeWord (sem deps — já instaladas; evita TF/speex)..."
 [ -d openwakeword ] || git clone --depth 1 https://github.com/dscripka/openwakeword
 pip install -q -e ./openwakeword --no-deps
 
-echo "==> Clonando o piper-sample-generator + baixando o modelo gerador..."
-[ -d piper-sample-generator ] || git clone --depth 1 https://github.com/rhasspy/piper-sample-generator
-mkdir -p piper-sample-generator/models
-[ -f piper-sample-generator/models/en_US-libritts_r-medium.pt ] || \
-  wget -q -O piper-sample-generator/models/en_US-libritts_r-medium.pt \
-    "https://github.com/rhasspy/piper-sample-generator/releases/download/v2.0.0/en_US-libritts_r-medium.pt"
+echo "==> Clonando o piper-sample-generator (fork dscripka, o que o treino usa)..."
+# O train.py faz `from generate_samples import generate_samples` — arquivo
+# que só existe no fork do dscripka (o do rhasspy tem outra interface).
+if [ -d piper-sample-generator ] && \
+   ! grep -q "def generate_samples" piper-sample-generator/generate_samples.py 2>/dev/null; then
+  echo "   (removendo clone antigo do fork errado)"; rm -rf piper-sample-generator
+fi
+[ -d piper-sample-generator ] || \
+  git clone --depth 1 https://github.com/dscripka/piper-sample-generator
+# o .json de config já vem no fork; falta baixar o modelo .pt (255MB)
+[ -f piper-sample-generator/models/en-us-libritts-high.pt ] || \
+  wget -q -O piper-sample-generator/models/en-us-libritts-high.pt \
+    "https://github.com/rhasspy/piper-sample-generator/releases/download/v1.0.0/en-us-libritts-high.pt"
 
 echo "==> Baixando os modelos base do openWakeWord (melspec + embedding)..."
 mkdir -p openwakeword/openwakeword/resources/models
