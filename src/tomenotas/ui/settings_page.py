@@ -208,6 +208,50 @@ class SettingsPage(Gtk.Box):
         stream_hint.set_xalign(0)
         self.pack_start(stream_hint, False, False, 0)
 
+        # ---------------- Section: Wake word ----------------
+
+        self.pack_start(self._section_label("Wake word"), False, False, 8)
+
+        ww_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        ww_row.pack_start(
+            Gtk.Label(label="Acionar por voz (\"Tomenotas\")", xalign=0),
+            False, False, 0)
+        self._wakeword_switch = Gtk.Switch(active=config.wakeword_enabled)
+        self._wakeword_switch.set_valign(Gtk.Align.CENTER)
+        self._wakeword_switch.connect("notify::active",
+                                     self._on_wakeword_toggle)
+        ww_row.pack_start(self._wakeword_switch, False, False, 0)
+        self.pack_start(ww_row, False, False, 0)
+
+        sens_row = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
+        sens_row.pack_start(Gtk.Label(label="Sensibilidade", xalign=0),
+                            False, False, 0)
+        # higher threshold = less sensitive; show it directly as the value
+        self._wakeword_scale = Gtk.Scale.new_with_range(
+            Gtk.Orientation.HORIZONTAL, 0.1, 0.9, 0.05)
+        self._wakeword_scale.set_value(config.wakeword_threshold)
+        self._wakeword_scale.set_hexpand(True)
+        self._wakeword_scale.set_draw_value(True)
+        self._wakeword_scale.connect("value-changed",
+                                    self._on_wakeword_sensitivity)
+        sens_row.pack_start(self._wakeword_scale, True, True, 0)
+        self.pack_start(sens_row, False, False, 0)
+
+        available = core is not None and getattr(core, "_wakeword", None)
+        ww_hint = Gtk.Label(
+            label=("O daemon escuta continuamente pela palavra e, ao ouvi-la, "
+                   "inicia a gravação (como o Super+R). É 100% offline — o "
+                   "áudio nunca sai da sua máquina. Limiar maior = menos "
+                   "disparos falsos.")
+            + ("" if available else
+               "\n\nO modelo \"Tomenotas\" ainda não está instalado; ao "
+               "instalá-lo, reinicie o app para ativar a escuta.")
+        )
+        ww_hint.get_style_context().add_class("dim-label")
+        ww_hint.set_line_wrap(True)
+        ww_hint.set_xalign(0)
+        self.pack_start(ww_hint, False, False, 0)
+
         # ---------------- Section: Notas críticas ----------------
 
         self.pack_start(self._section_label("Notas críticas"),
@@ -480,6 +524,27 @@ class SettingsPage(Gtk.Box):
             self._updating_stream_switch = False
             self._notifier.send("Erro", detail)
         return False
+
+    # ---------------- Wake word ----------------
+
+    def _on_wakeword_toggle(self, switch, _pspec):
+        enabled = switch.get_active()
+        update_config_file("wakeword_enabled", enabled)
+        if self._core is not None:
+            self._core.set_wakeword_enabled(enabled)
+        listening = (enabled and self._core is not None
+                     and getattr(self._core, "_wakeword", None) is not None)
+        self._notifier.send(
+            "Wake word",
+            "Ativado — escutando por \"Tomenotas\"." if listening else
+            ("Ativado, mas o modelo não está instalado." if enabled
+             else "Desativado."),
+        )
+
+    def _on_wakeword_sensitivity(self, scale):
+        threshold = round(scale.get_value(), 2)
+        # persisted; applied to the detector on the next daemon start
+        update_config_file("wakeword_threshold", threshold)
 
     # ---------------- Critical notes (alarm) ----------------
 

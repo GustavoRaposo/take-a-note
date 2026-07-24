@@ -34,7 +34,9 @@ from ..infra.recorder import Recorder  # noqa: E402
 from ..infra.shortcuts import ShortcutManager  # noqa: E402
 from ..infra.shortcuts_portal import choose_backend  # noqa: E402
 from ..infra.stream_transcriber import StreamTranscriber  # noqa: E402
+from ..infra.wakeword import WakeWordDetector  # noqa: E402
 from .live_window import LiveWindow  # noqa: E402
+from .wakeword_model import load_predict  # noqa: E402
 from ..infra.sound import AlarmSound  # noqa: E402
 from ..infra.downloads import Downloader, ModelManager  # noqa: E402
 from ..infra.meeting_recorder import MeetingRecorder  # noqa: E402
@@ -101,6 +103,11 @@ class TrayDaemon:
         # Live preview text (from the stream reader thread → main loop)
         core.on_stream_text = (
             lambda text: GLib.idle_add(self._on_stream_text, text)
+        )
+        # Wake word (from the detector thread → main loop): trigger a
+        # recording, exactly like pressing Super+R.
+        core.on_wakeword = (
+            lambda: GLib.idle_add(self._on_wakeword)
         )
         # Fase 5: clicking a notification opens the notes window
         notifier.on_activate = (
@@ -298,6 +305,10 @@ class TrayDaemon:
         self._live_window().update(text)
         return False  # idle_add: do not repeat
 
+    def _on_wakeword(self):
+        self._handle_toggle()  # same as Super+R
+        return False  # idle_add: do not repeat
+
 
 def main():
     config = Config.load()
@@ -344,6 +355,7 @@ def main():
         stream=StreamTranscriber(config.whisper_stream_bin,
                                  config.stream_model_path,
                                  language=config.language),
+        wakeword=_build_wakeword(config),
     )
     core.stream_enabled = config.stream_enabled
     sound = AlarmSound(config.alarm_sound)
@@ -415,10 +427,25 @@ def main():
             "Configurações.",
         )
         GLib.idle_add(app.show_window, "config")
+    # start listening for the wake word if enabled (and the model loaded)
+    core.set_wakeword_enabled(config.wakeword_enabled)
     # Ctrl+C in the terminal exits cleanly (useful when run by hand)
     signal.signal(signal.SIGINT, lambda *_: app.quit())
     Gtk.main()
     log.info("daemon stopped")
+
+
+def _build_wakeword(config):
+    """Builds the wake-word detector, or None if it can't run (deps or
+    model absent) — the daemon then simply never listens."""
+    predict = load_predict(config.wakeword_model_path)
+    if predict is None:
+        return None
+    # TOMENOTAS_WAKEWORD_DEBUG=1 logs live scores (tail the daemon.log) to
+    # help tune the sensitivity threshold.
+    debug = bool(os.environ.get("TOMENOTAS_WAKEWORD_DEBUG"))
+    return WakeWordDetector(predict, threshold=config.wakeword_threshold,
+                            debug=debug)
 
 
 if __name__ == "__main__":

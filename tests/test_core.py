@@ -87,6 +87,29 @@ class FakeStream:
             self._on_text(text)
 
 
+class FakeWakeword:
+    def __init__(self):
+        self.started = False
+        self.stopped = False
+        self._on_detected = None
+
+    @property
+    def is_running(self):
+        return self.started and not self.stopped
+
+    def start(self, on_detected):
+        self.started = True
+        self.stopped = False
+        self._on_detected = on_detected
+
+    def stop(self):
+        self.stopped = True
+
+    def fire(self):  # simulate the wake word being heard
+        if self._on_detected:
+            self._on_detected()
+
+
 def make_core(tmp_path, fails_on_start=False, transcription_error=None,
               text="texto transcrito", player_error=None, ready=True,
               stream_enabled=False, stream_ready=True):
@@ -101,7 +124,8 @@ def make_core(tmp_path, fails_on_start=False, transcription_error=None,
     core = DaemonCore(recorder, transcriber, notes, notifier,
                       player=FakePlayer(error=player_error),
                       meeting_recorder=meeting,
-                      stream=FakeStream(ready=stream_ready))
+                      stream=FakeStream(ready=stream_ready),
+                      wakeword=FakeWakeword())
     core.stream_enabled = stream_enabled
     return core, recorder, transcriber, notes, notifier
 
@@ -384,6 +408,68 @@ def test_shutdown_stops_the_live_stream(tmp_path):
     core.toggle()
     core.shutdown()
     assert core._stream.stopped
+
+
+def test_shutdown_stops_wakeword_and_does_not_relaunch(tmp_path):
+    core, _, _, _, _ = make_core(tmp_path)
+    core.set_wakeword_enabled(True)
+    assert core._wakeword.is_running
+    core.shutdown()
+    assert not core._wakeword.is_running  # stopped and not relaunched by IDLE
+
+
+def test_wakeword_listens_when_enabled_and_idle(tmp_path):
+    core, _, _, _, _ = make_core(tmp_path)
+    core.set_wakeword_enabled(True)
+    assert core._wakeword.is_running
+
+
+def test_wakeword_stays_off_when_disabled(tmp_path):
+    core, _, _, _, _ = make_core(tmp_path)
+    core.set_wakeword_enabled(False)
+    assert not core._wakeword.is_running
+
+
+def test_wakeword_pauses_while_recording_and_resumes_when_idle(tmp_path):
+    core, recorder, _, _, _ = make_core(tmp_path)
+    core.set_wakeword_enabled(True)
+    assert core._wakeword.is_running
+
+    recorder.audio_tmp.write_bytes(b"RIFF")
+    core.toggle()  # idle -> recording: must stop listening (mic + self-trigger)
+    assert not core._wakeword.is_running
+
+    core.toggle()            # recording -> transcribing
+    core.finish_recording()  # -> idle: listening resumes
+    assert core._wakeword.is_running
+
+
+def test_wakeword_detected_fires_the_observer(tmp_path):
+    core, _, _, _, _ = make_core(tmp_path)
+    fired = []
+    core.on_wakeword = lambda: fired.append(True)
+    core.set_wakeword_enabled(True)
+
+    core._wakeword.fire()  # the wake word was heard
+    assert fired == [True]
+
+
+def test_disabling_wakeword_stops_listening(tmp_path):
+    core, _, _, _, _ = make_core(tmp_path)
+    core.set_wakeword_enabled(True)
+    core.set_wakeword_enabled(False)
+    assert not core._wakeword.is_running
+
+
+def test_wakeword_enable_without_a_detector_is_a_noop(tmp_path):
+    # no wake-word model/deps available → no detector injected
+    core = DaemonCore(
+        FakeRecorder(tmp_path / "a.wav"),
+        FakeTranscriber(), SqliteNoteStore(tmp_path / "n.db", tmp_path / "n"),
+        FakeNotifier(),
+    )
+    core.set_wakeword_enabled(True)  # must not raise
+    core.toggle()  # state change also syncs — must not raise
 
 
 def test_shutdown_aborts_recording(tmp_path):

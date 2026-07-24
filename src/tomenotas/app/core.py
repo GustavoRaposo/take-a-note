@@ -17,7 +17,7 @@ log = logging.getLogger("tomenotas.core")
 
 class DaemonCore:
     def __init__(self, recorder, transcriber, notes, notifier, player=None,
-                 meeting_recorder=None, stream=None):
+                 meeting_recorder=None, stream=None, wakeword=None):
         self._recorder = recorder
         self._meeting_recorder = meeting_recorder  # mic + system audio
         self._active_recorder = recorder  # set per recording by toggle()
@@ -28,6 +28,8 @@ class DaemonCore:
         self._stream = stream  # live-preview transcriber (whisper-stream)
         self.stream_enabled = False  # set by the glue from config
         self._streaming = False
+        self._wakeword = wakeword  # always-on voice trigger
+        self.wakeword_enabled = False
         self._state = State.IDLE
         self._pending_critical = False  # mode of the recording in course
         self._pending_meeting = False
@@ -41,10 +43,34 @@ class DaemonCore:
         # Observer for the live preview text (fires from the stream reader
         # thread — the glue wraps with GLib.idle_add).
         self.on_stream_text = None
+        # Observer for the wake word (fires from the detector thread — the
+        # glue wraps with GLib.idle_add and routes it like Super+R).
+        self.on_wakeword = None
 
     @property
     def is_streaming(self) -> bool:
         return self._streaming
+
+    # ---------------- wake word (always-on voice trigger) ----------------
+
+    def set_wakeword_enabled(self, enabled: bool) -> None:
+        self.wakeword_enabled = bool(enabled)
+        self._sync_wakeword()
+
+    def _sync_wakeword(self) -> None:
+        """Listen only while idle and enabled — pausing during a recording
+        avoids mic contention and the note dictation self-triggering it."""
+        if self._wakeword is None:
+            return
+        want = self.wakeword_enabled and self._state is State.IDLE
+        if want and not self._wakeword.is_running:
+            self._wakeword.start(self._on_wakeword_detected)
+        elif not want and self._wakeword.is_running:
+            self._wakeword.stop()
+
+    def _on_wakeword_detected(self) -> None:
+        if self.on_wakeword is not None:
+            self.on_wakeword()
 
     @property
     def state(self) -> State:
@@ -55,6 +81,7 @@ class DaemonCore:
             return
         log.info("state: %s -> %s", self._state.name, new.name)
         self._state = new
+        self._sync_wakeword()  # listen only while idle
         if self.on_state_change is not None:
             self.on_state_change(new)
 
@@ -194,6 +221,9 @@ class DaemonCore:
 
     def shutdown(self) -> None:
         """Clean shutdown: aborts any pending recording without transcribing."""
+        self.wakeword_enabled = False  # so _set_state won't relaunch it
+        if self._wakeword is not None:
+            self._wakeword.stop()
         self._stop_stream()
         self._active_recorder.abort()
         self._set_state(State.IDLE)

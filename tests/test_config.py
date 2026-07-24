@@ -56,6 +56,30 @@ def test_load_rejects_unknown_stream_model(tmp_path):
     assert Config.load(config_file).stream_model == "base"
 
 
+def test_wakeword_defaults():
+    cfg = Config(base_dir=Path("/x/dados"))
+    assert cfg.wakeword_enabled is False  # opt-in (privacy)
+    assert cfg.wakeword_threshold == 0.5
+    assert cfg.wakeword_model_path == Path("/x/dados/models/tomenotas-ww.onnx")
+
+
+def test_load_reads_wakeword_settings(tmp_path):
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps({
+        "wakeword_enabled": True,
+        "wakeword_threshold": 0.7,
+    }))
+    cfg = Config.load(config_file)
+    assert cfg.wakeword_enabled is True
+    assert cfg.wakeword_threshold == 0.7
+
+
+def test_load_clamps_bad_wakeword_threshold(tmp_path):
+    config_file = tmp_path / "config.json"
+    config_file.write_text(json.dumps({"wakeword_threshold": "nada"}))
+    assert Config.load(config_file).wakeword_threshold == 0.5
+
+
 def test_shortcut_backend_defaults_to_auto():
     assert Config().shortcut_backend == "auto"
 
@@ -160,6 +184,24 @@ def test_explicit_config_wins_over_system_install(tmp_path, monkeypatch):
 
     cfg = Config(whisper_bin=Path("/opt/meu-whisper"))
     assert cfg.whisper_bin == Path("/opt/meu-whisper")
+
+
+def test_wakeword_model_falls_back_to_system_share(tmp_path, monkeypatch):
+    from tomenotas.infra import config as config_mod
+
+    share = tmp_path / "usr" / "share" / "tomenotas"
+    (share / "models").mkdir(parents=True)
+    (share / "models" / "tomenotas-ww.onnx").write_bytes(b"onnx")
+    monkeypatch.setattr(config_mod, "SYSTEM_SHARE_DIR", share)
+
+    # no user-local model -> the .deb-shipped one
+    cfg = Config(base_dir=tmp_path / "dados")
+    assert cfg.wakeword_model_path == share / "models" / "tomenotas-ww.onnx"
+
+    # a user-local model (e.g. a retrain) wins
+    (tmp_path / "dados" / "models").mkdir(parents=True)
+    (tmp_path / "dados" / "models" / "tomenotas-ww.onnx").write_bytes(b"x")
+    assert cfg.wakeword_model_path == tmp_path / "dados" / "models" / "tomenotas-ww.onnx"
 
 
 def test_icons_dir_falls_back_to_system_share(tmp_path, monkeypatch):

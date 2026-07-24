@@ -113,6 +113,18 @@ def test_settings_are_read_only_in_portal_mode(tmp_path):
         window.destroy()
 
 
+def test_streaming_and_wakeword_sections_default_off(tmp_path):
+    window = _make_window(tmp_path)
+    try:
+        window.refresh()
+        settings = window._settings
+        assert settings._stream_switch.get_active() is False
+        assert settings._wakeword_switch.get_active() is False  # opt-in
+        assert 0.1 <= settings._wakeword_scale.get_value() <= 0.9
+    finally:
+        window.destroy()
+
+
 def test_rows_carry_the_note_and_activating_opens_the_detail(window):
     (row,) = window._list.get_children()
     assert getattr(row, "note", None) is not None

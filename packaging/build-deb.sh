@@ -94,6 +94,47 @@ if [ "$SKIP_VENDOR" -eq 0 ] || [ ! -f "$VENDOR/piper/piper" ]; then
     rm -f "$VENDOR/piper.tar.gz"
 fi
 
+# ---------------- vendor: runtime do wake word (só-ONNX) ----------------
+# O daemon roda no python3 do sistema; onnxruntime/openwakeword/numpy não
+# estão no apt, então vendorizamos as wheels em vendor/pydeps/ e as
+# colocamos no sys.path do daemon (ver o entry point gerado adiante). As
+# wheels compiladas (numpy/onnxruntime) casam com a ABI do python DESTE host
+# de build — se o alvo tiver outro python3, o wake word degrada em silêncio
+# (load_predict devolve None) e o resto do app segue normal.
+WW_ONNX_BASE="v0.5.1"  # release do openWakeWord com os modelos-base .onnx
+if [ "$SKIP_VENDOR" -eq 0 ] || [ ! -d "$VENDOR/pydeps/openwakeword" ]; then
+    echo "==> Vendorizando o runtime do wake word (numpy+onnxruntime+openwakeword)..."
+    rm -rf "$VENDOR/pydeps"
+    # inferência precisa só destes; openwakeword sem deps (evita TF/tflite)
+    python3 -m pip install --quiet --target "$VENDOR/pydeps" \
+        numpy onnxruntime tqdm requests
+    python3 -m pip install --quiet --target "$VENDOR/pydeps" \
+        openwakeword --no-deps
+    # o __init__ importa custom_verifier_model (puxa scipy) — não usamos
+    # verificador custom na inferência; removemos p/ não arrastar o scipy.
+    sed -i '/from openwakeword.custom_verifier_model import train_custom_verifier/d' \
+        "$VENDOR/pydeps/openwakeword/__init__.py"
+    sed -i "s/__all__ = \['Model', 'VAD', 'train_custom_verifier'\]/__all__ = ['Model', 'VAD']/" \
+        "$VENDOR/pydeps/openwakeword/__init__.py"
+    # modelos-base .onnx (melspec + embedding) — offline, embutidos no pacote
+    mkdir -p "$VENDOR/pydeps/openwakeword/resources/models"
+    for m in melspectrogram.onnx embedding_model.onnx; do
+        wget -q -O "$VENDOR/pydeps/openwakeword/resources/models/$m" \
+            "https://github.com/dscripka/openWakeWord/releases/download/$WW_ONNX_BASE/$m"
+    done
+    # remove pycache/testes p/ enxugar
+    find "$VENDOR/pydeps" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+fi
+
+# o modelo treinado "Tomenotas" é um artefato de treino (GPU, manual). Não o
+# reconstruímos aqui: procuramos em vendor/, senão na instalação do usuário.
+if [ ! -f "$VENDOR/tomenotas-ww.onnx" ]; then
+    USER_WW="$HOME/.local/share/tomenotas/models/tomenotas-ww.onnx"
+    if [ -f "$USER_WW" ]; then
+        cp "$USER_WW" "$VENDOR/tomenotas-ww.onnx"
+    fi
+fi
+
 # ---------------- 2. staging ----------------
 
 echo "==> Montando a árvore do pacote..."
@@ -111,9 +152,20 @@ cp -r "$ROOT/src/tomenotas" "$STAGING/usr/lib/python3/dist-packages/"
 find "$STAGING/usr/lib/python3/dist-packages" \
     -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
 
-# entry point do daemon (equivalente ao console script do pyproject)
+# entry point do daemon (equivalente ao console script do pyproject).
+# Prepende o pydeps vendorizado (onnxruntime/openwakeword/numpy) ao sys.path
+# — o wake word roda a partir dali; se a ABI não casar com o python do alvo,
+# o import falha lá dentro e o wake word simplesmente não inicia (o resto do
+# app não depende dele).
 cat > "$STAGING/usr/bin/tomenotas-daemon" <<'EOF'
 #!/usr/bin/python3
+import os
+import sys
+
+_pydeps = "/usr/lib/tomenotas/pydeps"
+if os.path.isdir(_pydeps):
+    sys.path.insert(0, _pydeps)
+
 from tomenotas.ui.daemon import main
 
 if __name__ == "__main__":
@@ -134,6 +186,21 @@ cp -r "$VENDOR/piper" "$STAGING/usr/lib/tomenotas/piper"
 chmod 755 "$STAGING/usr/lib/tomenotas/whisper-cli" \
           "$STAGING/usr/lib/tomenotas/whisper-stream" \
           "$STAGING/usr/lib/tomenotas/piper/piper"
+
+# runtime do wake word (só-ONNX) + modelo treinado, se disponíveis no build.
+# Ambos são opcionais: sem eles, o pacote só não tem wake word.
+if [ -d "$VENDOR/pydeps/openwakeword" ]; then
+    cp -r "$VENDOR/pydeps" "$STAGING/usr/lib/tomenotas/pydeps"
+else
+    echo "AVISO: vendor/pydeps ausente — pacote sairá SEM runtime de wake word." >&2
+fi
+if [ -f "$VENDOR/tomenotas-ww.onnx" ]; then
+    mkdir -p "$STAGING/usr/share/tomenotas/models"
+    cp "$VENDOR/tomenotas-ww.onnx" "$STAGING/usr/share/tomenotas/models/tomenotas-ww.onnx"
+else
+    echo "AVISO: vendor/tomenotas-ww.onnx ausente — pacote sairá SEM o modelo" >&2
+    echo "       do wake word (treine com training/train.sh e rode de novo)." >&2
+fi
 
 # licença (Debian policy: /usr/share/doc/<pacote>/copyright)
 mkdir -p "$STAGING/usr/share/doc/tomenotas"
