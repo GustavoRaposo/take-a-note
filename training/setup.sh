@@ -58,7 +58,7 @@ echo "==> Deps de treino (sem TensorFlow/tflite/speex — não usados p/ ONNX)..
 pip install -q torchinfo torchmetrics speechbrain audiomentations \
     torch-audiomentations "datasets<3" soundfile "scipy<1.15" scikit-learn \
     numpy pyyaml tqdm mutagen acoustics onnx onnxruntime requests \
-    pronouncing espeak-phonemizer webrtcvad
+    pronouncing espeak-phonemizer deep-phonemizer webrtcvad
 
 echo "==> Clonando o openWakeWord (sem deps — já instaladas; evita TF/speex)..."
 [ -d openwakeword ] || git clone --depth 1 https://github.com/dscripka/openwakeword
