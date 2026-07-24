@@ -34,7 +34,8 @@ if [ -z "$PY" ]; then
 fi
 echo "==> Python de treino: $("$PY" --version) ($PY)"
 
-echo "==> Criando venv..."
+echo "==> Criando venv (limpa)..."
+rm -rf venv          # evita reaproveitar uma venv de outro Python (mistura)
 "$PY" -m venv venv
 # shellcheck disable=SC1091
 source venv/bin/activate

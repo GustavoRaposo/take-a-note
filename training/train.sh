@@ -7,8 +7,17 @@ set -e
 
 WORKDIR="${1:-$HOME/tomenotas-wakeword-training}"
 cd "$WORKDIR"
+if [ ! -f venv/bin/activate ]; then
+  echo "ERRO: venv não encontrada em $WORKDIR. Rode ./setup.sh primeiro." >&2
+  exit 1
+fi
 # shellcheck disable=SC1091
 source venv/bin/activate
+if ! python3 -c "import torch, openwakeword" 2>/dev/null; then
+  echo "ERRO: a venv está incompleta (torch/openwakeword ausentes)." >&2
+  echo "Rode ./setup.sh de novo." >&2
+  exit 1
+fi
 
 TRAIN="python3 openwakeword/openwakeword/train.py --training_config tomenotas.yml"
 

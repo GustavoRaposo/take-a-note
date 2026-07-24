@@ -7,8 +7,17 @@ set -e
 
 WORKDIR="${1:-$HOME/tomenotas-wakeword-training}"
 cd "$WORKDIR"
+if [ ! -f venv/bin/activate ]; then
+  echo "ERRO: venv não encontrada em $WORKDIR. Rode ./setup.sh primeiro." >&2
+  exit 1
+fi
 # shellcheck disable=SC1091
 source venv/bin/activate
+if ! python3 -c "import numpy, datasets, scipy" 2>/dev/null; then
+  echo "ERRO: a venv está incompleta (deps ausentes)." >&2
+  echo "Rode ./setup.sh de novo (ele recria a venv limpa)." >&2
+  exit 1
+fi
 
 echo "==> 1/4 RIRs (respostas de impulso — reverberação) do MIT..."
 python3 - <<'PY'
